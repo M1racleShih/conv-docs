@@ -1,0 +1,12 @@
+{
+  "agents": [
+    "pi"
+  ],
+  "mode": "copy",
+  "schema_version": 1,
+  "skills": [
+    "plain-docs",
+    "security-review"
+  ],
+  "track": true
+}
