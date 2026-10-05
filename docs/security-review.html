@@ -72,7 +72,7 @@
 <h2>已确认的防护（逐项验证）</h2>
 <table>
   <tr><th>STRIDE 面</th><th>防护</th><th>证据</th></tr>
-  <tr><td>欺骗</td><td>token 哈希存储 + 常数时间比较；错/缺 token 一律 401；连续失败封禁</td><td>47 项单测含 401/429 矩阵</td></tr>
+  <tr><td>欺骗</td><td>token 哈希存储 + 常数时间比较；错/缺 token 一律 401；连续失败封禁</td><td>49 项单测含 401/429 矩阵</td></tr>
   <tr><td>篡改</td><td>无写入端点；方法白名单 GET/HEAD，WebDAV 动词 405；请求体不消费</td><td>单测覆盖 9 种写入动词</td></tr>
   <tr><td>抵赖</td><td>JSONL 审计：认证失败、ticket 拒绝、文件访问（含来源、根、路径）；凭证永不入日志</td><td><code>~/.local/state/docgate/audit.log</code></td></tr>
   <tr><td>信息泄露</td><td>用户内容永不以 <code>text/html</code> 返回（完整模式除外，强制 CSP sandbox 无 allow-same-origin）；路径沙箱（realpath 包含性、符号链接逃逸拒绝、隐藏文件跳过、扩展名白名单）；错误响应不含栈与本地路径</td><td>单测 + 实测（<code>../</code>、<code>.git</code>、越界符号链接均 404）</td></tr>

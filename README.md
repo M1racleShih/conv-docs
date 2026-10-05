@@ -41,7 +41,7 @@ python3 -m docgate serve                           # 127.0.0.1:8380
 ## 开发与验证
 
 ```bash
-python3 -m unittest discover -s tests        # 47 项：认证、只读、路径沙箱、ticket、响应头
+python3 -m unittest discover -s tests        # 49 项：认证、只读、路径沙箱、ticket、响应头
 TOKEN=<token> node scripts/browser-smoke.mjs # 无头 Chrome 端到端：登录→浏览→渲染→沙箱
 ```
 
