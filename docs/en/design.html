@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>conv-docs · Design</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="site">
+  <div class="inner">
+    <a class="brand" href="index.html"><img src="../../src/conv_docs/web/favicon.svg" alt="" width="22" height="22"> conv-docs</a>
+    <nav>
+      <a href="index.html">Research</a>
+      <a class="active" href="design.html">Design</a>
+      <a href="deploy.html">Deployment</a>
+      <a href="security-review.html">Security</a>
+      <a href="../zh/design.html">中文</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<h1>Design</h1>
+<p class="lead">conv-docs (Convenient Documents) is an independent read-only document gateway: it serves <strong>explicitly published</strong> workspace directories from your PC, through a dedicated hostname on your Cloudflare Tunnel, to a mobile reader protected by a token. This page is the implementation blueprint and the security model.</p>
+
+<h2>1. Goals and non-goals</h2>
+<div class="cards">
+  <div class="card">
+    <h4>Goals</h4>
+    <p>① Visible only after an explicit publish (R1) ② strictly read-only (R2) ③ Markdown / HTML rendering (R3) ④ token auth (R4) ⑤ fully isolated from the herdr-remote control plane (R5)</p>
+  </div>
+  <div class="card">
+    <h4>Non-goals</h4>
+    <p>No editing, no multi-user/permission system, no full-text search, no replacement for herdr-remote's agent control, nothing hosted in the cloud</p>
+  </div>
+</div>
+
+<h2>2. Architecture</h2>
+<div class="arch">Phone browser / PWA
+   │  HTTPS
+   ▼
+docs.yourdomain ──── Cloudflare Tunnel (same tunnel as relay, separate ingress rule)
+   │
+   ▼
+conv-docs service (127.0.0.1:8380, Python standard library)
+   ├─ Auth      Bearer token (hash storage + constant-time compare + failure rate limiting)
+   ├─ Grants    publish list (explicit publish / unpublish)
+   ├─ Files     path sandbox (realpath containment, symlink-escape refusal, hidden files skipped,
+   │            extension allowlist)
+   └─ Rendering in the browser: marked + DOMPurify + highlight.js (vendored)
+   │
+   ▼
+published workspace directories (loopback only; exposed solely via the tunnel)
+
+herdr-remote relay :8375 ── control plane, untouched</div>
+<p>Key decision: <strong>the document service is physically isolated from the agent control plane</strong> — different port, different hostname, different token. The document service parses untrusted file content; keeping it in a separate, minimal-privilege process means a parsing bug cannot reach the WebSocket interface that issues commands to agents. That is how "without hurting daily use" is implemented: the existing relay needs zero changes.</p>
+
+<h2>3. Core concepts</h2>
+<table>
+  <tr><th style="width:150px">Concept</th><th>Definition</th></tr>
+  <tr><td>Published root</td><td>A <code>name → absolute directory</code> mapping added explicitly with <code>conv-docs publish</code> and removed with <code>conv-docs unpublish</code>, persisted in the config file. There are no roots by default — a fresh install exposes nothing.</td></tr>
+  <tr><td>Token</td><td>A 256-bit random value; the server stores only its SHA-256 hash (config file 0600). The phone enters it once and keeps it in the browser. <code>conv-docs token rotate</code> revokes and replaces it instantly.</td></tr>
+  <tr><td>Path sandbox</td><td>Every file access resolves the relative path to a realpath and verifies it still lies inside a published root; any escape (<code>../</code>, absolute paths, symlinks pointing outside) is refused.</td></tr>
+  <tr><td>One-shot ticket</td><td>For HTML full mode: an authenticated call exchanges a 30-second, single-use ticket bound to one file, so the long-lived token never appears in a URL.</td></tr>
+</table>
+
+<h2>4. Command line</h2>
+<pre><code>$ uv run conv-docs publish ~/work/proj-a --as proj-a   # explicit publish
+$ uv run conv-docs list                                  # show the publish list
+$ uv run conv-docs unpublish proj-a                      # revoke
+$ uv run conv-docs token rotate                          # new token (printed once)
+$ uv run conv-docs serve --host 127.0.0.1 --port 8380    # start the service</code></pre>
+<p>(<code>uv run conv-docs</code> is equivalent to <code>python3 -m conv_docs</code> if you don't use uv.) Config file <code>~/.config/conv-docs/config.json</code> (mode 0600); audit log <code>~/.local/state/conv-docs/audit.log</code> (JSONL). Publishing changes take effect immediately — the service hot-reloads the config file.</p>
+
+<h2>5. HTTP API (/api/v1)</h2>
+<p>Everything except health requires <code>Authorization: Bearer &lt;token&gt;</code>. One exception: <code>rawhtml</code> is loaded as a browser iframe navigation, which cannot carry headers — there the one-shot ticket is the credential (and only an authenticated caller can obtain one). Only GET/HEAD are accepted; all other methods return 405 (WebDAV verbs explicitly rejected).</p>
+<table>
+  <tr><th>Endpoint</th><th>Returns</th><th>Notes</th></tr>
+  <tr><td><code>GET /api/v1/health</code></td><td>JSON</td><td>Unauthenticated liveness; only <code>{ok, service, version}</code></td></tr>
+  <tr><td><code>GET /api/v1/roots</code></td><td>JSON</td><td>Published roots (name, real path, entry count)</td></tr>
+  <tr><td><code>GET /api/v1/tree?root=&amp;path=</code></td><td>JSON</td><td>Directory listing: name, kind (dir/text/image/…), size, mtime. Hidden and unsupported entries never appear</td></tr>
+  <tr><td><code>GET /api/v1/meta?root=&amp;path=</code></td><td>JSON</td><td>Single-file metadata (kind, size, mtime)</td></tr>
+  <tr><td><code>GET /api/v1/raw?root=&amp;path=</code></td><td>raw bytes</td><td>File content. Text is always returned as <code>text/plain</code>, images as <code>image/*</code>, PDF as <code>application/pdf</code>. <strong>User content is never served as text/html</strong> — rendering happens only after client-side sanitisation</td></tr>
+  <tr><td><code>GET /api/v1/html-ticket?root=&amp;path=</code></td><td>JSON</td><td>Issues a one-shot ticket (30 s) for HTML full mode</td></tr>
+  <tr><td><code>GET /api/v1/rawhtml?root=&amp;path=&amp;ticket=</code></td><td>text/html</td><td>The only endpoint that returns HTML, guarded by the one-shot ticket. The response forces <code>Content-Security-Policy: sandbox …</code> (without allow-same-origin), giving the document an opaque origin: its scripts may run, but they cannot reach the viewer's token, localStorage or DOM</td></tr>
+</table>
+<p>Every response carries <code>X-Content-Type-Options: nosniff</code>; API responses also carry <code>Cache-Control: no-store</code>. No CORS headers are set, so pages on other origins cannot read responses.</p>
+
+<h2>6. Rendering pipeline</h2>
+<table>
+  <tr><th>Type</th><th>Pipeline</th></tr>
+  <tr><td>Markdown (.md/.markdown)</td><td>marked → DOMPurify sanitise → inject → highlight.js for code blocks. Relative in-page links are rewritten to viewer routes, external links get <code>rel="noopener noreferrer"</code>; relative images are fetched through the authenticated API and shown as blob URLs</td></tr>
+  <tr><td>HTML (.html/.htm), default mode</td><td>DOMPurify whole-document sanitisation (styles and structure kept, scripts and event handlers stripped); the document's own relative stylesheets are fetched and inlined. Covers the vast majority of reading</td></tr>
+  <tr><td>HTML full mode (opt-in per file)</td><td>One-shot ticket → sandboxed iframe loading <code>rawhtml</code>. Document scripts run (interactive charts etc.) inside an opaque-origin sandbox that cannot touch the token or page data</td></tr>
+  <tr><td>Plain text / code</td><td>highlight.js display (the <code>text/plain</code> original is never executed)</td></tr>
+  <tr><td>Images / PDF</td><td>Shown via blob URLs; SVG renders as an image (scripts do not run in <code>&lt;img&gt;</code> context)</td></tr>
+</table>
+
+<h2>7. Security model (threat → countermeasure)</h2>
+<table>
+  <tr><th>Threat</th><th>Countermeasure</th></tr>
+  <tr><td>Strangers reading documents (R4)</td><td>Bearer token required; server stores a hash with constant-time comparison; failed auth is rate-limited per source (10 failures / 15 min → temporary block); <code>token rotate</code> revokes instantly</td></tr>
+  <tr><td>Tunnel used to read unauthorised directories (R1)</td><td>No roots by default; the publish list is persisted and instantly revocable; every request re-checks realpath containment; symlinks escaping the root are refused; hidden files/dirs (<code>.git</code>, <code>.env</code>, …) are skipped; files outside the extension allowlist are unavailable</td></tr>
+  <tr><td>Malicious document scripts stealing the token or impersonating the UI</td><td>The server <strong>never serves user content as text/html</strong> (text/plain + nosniff before rendering); the client sanitises with DOMPurify; full mode runs in a CSP sandbox without allow-same-origin; the viewer itself ships a strict CSP (<code>default-src 'none'; script-src 'self'; frame-src 'self' blob:; base-uri 'none'; form-action 'none'</code>)</td></tr>
+  <tr><td>Any write attempt (R2)</td><td>No write endpoint exists; the method allowlist is GET/HEAD and WebDAV verbs return 405; request bodies are never consumed</td></tr>
+  <tr><td>Token leaking into logs/URLs</td><td>The token travels only in the Authorization header; tickets are short-lived, single-use and file-bound; the audit log records events and paths, never credentials</td></tr>
+  <tr><td>Repudiation / after-the-fact review</td><td>JSONL audit log: failed auth, ticket rejections, file access (time, source IP, root, path)</td></tr>
+  <tr><td>Resource exhaustion (huge files)</td><td>Render size cap (default 2 MB, with an explicit "render anyway" option); per-connection timeouts; oversized URLs and request bodies refused</td></tr>
+  <tr><td>Bleeding into the agent control plane (R5)</td><td>Separate process, port, hostname and token; loopback binding, exposed only through the tunnel; herdr-remote relay untouched</td></tr>
+</table>
+
+<div class="callout warn">
+<p><strong>Residual risks, stated plainly:</strong> ① non-hidden sensitive files inside a published directory (a hand-written password in <code>notes.yaml</code>) are readable by the token holder — check what you publish, or use <code>--docs-only</code>; ② full-mode document scripts can still make network requests (the sandbox blocks same-origin access only) — use the default mode for untrusted HTML; ③ a token leaked from the phone equals the whole document set — call <code>token rotate</code> immediately.</p>
+</div>
+
+<h2>8. Acceptance criteria</h2>
+<table>
+  <tr><th>Requirement</th><th>How it is verified</th></tr>
+  <tr><td>R1 Explicit grant</td><td>Tests: unpublished paths are invisible in tree/roots and return 404; unpublish takes effect immediately</td></tr>
+  <tr><td>R2 Read-only</td><td>Tests: POST/PUT/DELETE/MKCOL/PROPFIND … all 405; no write endpoint exists</td></tr>
+  <tr><td>R3 Rendering</td><td>Tests + real-browser checks: md renders with highlighted code, HTML sanitises correctly, full-mode sandbox verified</td></tr>
+  <tr><td>R4 Token</td><td>Tests: no token 401, wrong token 401, repeated failures 429; real phone login verified</td></tr>
+  <tr><td>R5 Safe and unobtrusive</td><td>Tests assert response headers (nosniff/CSP); herdr-remote config unchanged (one ingress rule added)</td></tr>
+</table>
+
+</main>
+<footer>conv-docs · Design · <a href="index.html">Research</a> · <a href="deploy.html">Deployment</a> · <a href="../zh/design.html">中文</a></footer>
+</body>
+</html>

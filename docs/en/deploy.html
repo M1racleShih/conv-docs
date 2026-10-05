@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>conv-docs · Deployment &amp; Usage</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="site">
+  <div class="inner">
+    <a class="brand" href="index.html"><img src="../../src/conv_docs/web/favicon.svg" alt="" width="22" height="22"> conv-docs</a>
+    <nav>
+      <a href="index.html">Research</a>
+      <a href="design.html">Design</a>
+      <a class="active" href="deploy.html">Deployment</a>
+      <a href="security-review.html">Security</a>
+      <a href="../zh/deploy.html">中文</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<h1>Deployment &amp; Usage</h1>
+<p class="lead">From zero to reading on your phone: install the service, generate a token, publish directories, join your Cloudflare Tunnel, and daily operations.</p>
+
+<h2>1. Requirements</h2>
+<ul>
+  <li>Python 3.10+ (the server has zero third-party runtime dependencies)</li>
+  <li><a href="https://docs.astral.sh/uv/">uv</a> (recommended): project environment and dependency locking; without uv, plain <code>python3 -m conv_docs</code> works too</li>
+  <li>Node.js (optional, only to rebuild the TypeScript viewer; the compiled <code>app.js</code> is committed)</li>
+  <li><code>cloudflared</code> (the Cloudflare Tunnel you already use for herdr-remote is fine)</li>
+  <li>systemd (optional, for running as a service)</li>
+</ul>
+
+<h2>2. Install and first start</h2>
+<pre><code>git clone &lt;this repo&gt; conv-docs &amp;&amp; cd conv-docs
+
+# 0. Prepare the environment (uv; equivalent: python3 -m conv_docs …)
+uv sync
+
+# 1. Generate the access token (printed once — save it for your phone)
+uv run conv-docs token rotate
+
+# 2. Explicitly publish a workspace directory (nothing is exposed by default)
+uv run conv-docs publish ~/work/proj-a --as proj-a
+
+# 3. Start (listens on 127.0.0.1:8380 only)
+uv run conv-docs serve</code></pre>
+<p>Verify from the PC browser at <code>http://127.0.0.1:8380</code>: after entering the token you should see the published directory.</p>
+
+<h3>Run as a service (systemd user unit)</h3>
+<pre><code>bash scripts/install-service.sh</code></pre>
+<p>The script writes <code>~/.config/systemd/user/conv-docs.service</code>, enables and starts it, and prints a cloudflared ingress snippet. If no token exists yet it generates one. Management:</p>
+<pre><code>systemctl --user status conv-docs
+systemctl --user restart conv-docs
+journalctl --user -u conv-docs -f</code></pre>
+
+<h2>3. Join your Cloudflare Tunnel</h2>
+<p>conv-docs shares the tunnel with herdr-remote without interfering: you add <strong>one</strong> hostname mapping to the ingress rules; the relay's rules and token stay exactly as they are.</p>
+<pre><code># ~/.cloudflared/config.yml (sketch — keep your existing rules)
+ingress:
+  - hostname: relay.yourdomain.example   # existing herdr-remote rule, unchanged
+    service: http://127.0.0.1:8375
+  - hostname: docs.yourdomain.example    # new: the docs gateway
+    service: http://127.0.0.1:8380
+  - service: http_status:404             # catch-all must stay last</code></pre>
+<pre><code>cloudflared tunnel route dns &lt;tunnel-name&gt; docs.yourdomain.example
+cloudflared tunnel ingress validate
+systemctl --user restart cloudflared     # or your cloudflared run mode</code></pre>
+<div class="callout">
+<p>Verify: open <code>https://docs.yourdomain.example/api/v1/health</code> from the phone and the PC — you should get <code>{"ok": true, ...}</code>. Requesting <code>/api/v1/roots</code> without a token must return 401.</p>
+</div>
+
+<h2>4. On the phone</h2>
+<ol>
+  <li>Open <code>https://docs.yourdomain.example</code>, paste the token (it stays in the browser's local storage).</li>
+  <li>"Workspaces" lists published directories → tap through the tree → tap a file to read it rendered. Markdown renders directly; HTML uses safe render (scripts stripped) by default — switch to "Full mode" for interactive content.</li>
+  <li>Use "Add to Home Screen" to treat it as an app. The UI defaults to English and switches to Chinese with one tap; it follows the system light/dark theme and can be pinned in the header.</li>
+</ol>
+
+<h2>5. Daily operations</h2>
+<table>
+  <tr><th>Goal</th><th>Command / action</th></tr>
+  <tr><td>Publish another workspace</td><td><code>uv run conv-docs publish &lt;dir&gt; --as &lt;name&gt;</code> — effective immediately, no restart</td></tr>
+  <tr><td>Revoke a workspace</td><td><code>uv run conv-docs unpublish &lt;name&gt;</code> — effective immediately</td></tr>
+  <tr><td>Show the publish list</td><td><code>uv run conv-docs list</code></td></tr>
+  <tr><td>Rotate the token (leak or routine)</td><td><code>uv run conv-docs token rotate</code> — old token dies at once; also saved to <code>~/.config/conv-docs/token.txt</code> (0600)</td></tr>
+  <tr><td>Docs and images only</td><td>publish with <code>--docs-only</code> (code and data files stay hidden)</td></tr>
+  <tr><td>Review access</td><td><code>tail -f ~/.local/state/conv-docs/audit.log</code> (JSONL: failed auth, publish changes, file access)</td></tr>
+  <tr><td>Config file</td><td><code>~/.config/conv-docs/config.json</code> (0600, token hash only, never plaintext)</td></tr>
+</table>
+
+<h2>6. Security checklist</h2>
+<ul>
+  <li>The service binds <code>127.0.0.1</code> only and is exposed through the tunnel; never use <code>--host 0.0.0.0</code>.</li>
+  <li>Use the random token from <code>token rotate</code>, not a chosen password; the device holding the token is a trusted device.</li>
+  <li>Before publishing, confirm the directory contains nothing you would not want on your phone; when unsure, add <code>--docs-only</code>.</li>
+  <li>Hidden files/dirs (<code>.git</code>, <code>.env</code>, …) are never served; files outside the extension allowlist are never served.</li>
+  <li>Optional second layer: put a Cloudflare Access policy (e.g. email OTP) in front of <code>docs.*</code> and keep the token as the application-level credential.</li>
+</ul>
+
+<h2>7. Troubleshooting</h2>
+<table>
+  <tr><th>Symptom</th><th>Check</th></tr>
+  <tr><td>401 on the phone</td><td>Is the token complete? Was it rotated? 10 consecutive failures trigger a 15-minute block (wait or switch network)</td></tr>
+  <tr><td>404 for a directory/file</td><td><code>conv-docs list</code> — is it published? Is the file hidden or outside the extension allowlist? Path spelling</td></tr>
+  <tr><td>502/530 through the tunnel</td><td><code>systemctl --user status conv-docs</code>; <code>cloudflared tunnel ingress validate</code>; is the docs rule above the catch-all?</td></tr>
+  <tr><td>HTML full mode is blank</td><td>The ticket is single-use and lasts 30 seconds — tap "Full mode" again; scripts constrained by the sandbox are expected behaviour</td></tr>
+  <tr><td>Styles missing</td><td>External <code>&lt;link&gt;</code> stylesheets are blocked by CSP by design; relative stylesheets are inlined automatically</td></tr>
+</table>
+
+</main>
+<footer>conv-docs · Deployment · <a href="index.html">Research</a> · <a href="design.html">Design</a> · <a href="../zh/deploy.html">中文</a></footer>
+</body>
+</html>

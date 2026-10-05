@@ -1,79 +1,96 @@
-# conv-doc
+<p align="center">
+  <img src="assets/logo.svg" width="180" alt="conv-docs logo: a cute owl reading a document">
+</p>
 
-只读文档网关：把 PC 上**显式发布**的 workspace 目录，通过 Cloudflare Tunnel 以 token 认证的方式送到手机端渲染阅读。Markdown / HTML 渲染，纯只读，与 [herdr-remote](https://github.com/dcolinmorgan/herdr-remote) 的 agent 控制通道完全隔离。
+<h1 align="center">conv-docs</h1>
 
-方案调研、设计与部署手册（HTML）：
+<p align="center"><b>Convenient Documents</b> — read-only workspace docs, on your phone.</p>
 
-- [调研报告](docs/index.html) — 需求、候选方案对比（含 star / 活跃度证据）、选型结论
-- [方案设计](docs/design.html) — 架构、API、渲染管线、威胁模型
-- [部署与使用](docs/deploy.html) — 安装、systemd、Cloudflare Tunnel、手机端、运维与排查
-- [安全评审报告](docs/security-review.html) — STRIDE 逐面评审：发现、处置与残余风险
+<p align="center">
+  English · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-## 特性
+---
 
-- **显式发布才可见**：默认零暴露；`publish` / `unpublish` 按目录授权，即时生效
-- **纯只读**：服务端只有 GET/HEAD，WebDAV 类写入动词一律 405
-- **token 认证**：Bearer token，服务端只存 SHA-256 哈希（配置 0600），支持一键轮换；认证失败按来源限速
-- **Markdown / HTML 渲染**：marked + DOMPurify + highlight.js（仓库内置），HTML 另有脚本沙箱「完整模式」
-- **路径沙箱**：realpath 包含性检查、符号链接逃逸拒绝、隐藏文件跳过、扩展名白名单
-- **零第三方运行时依赖**：Python 3.10+ 标准库实现
+conv-docs serves **explicitly published** workspace directories from your PC, through a dedicated hostname on your [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/), to a mobile reader with token auth. Markdown and HTML render beautifully; strictly read-only; fully isolated from the [herdr-remote](https://github.com/dcolinmorgan/herdr-remote) agent control plane.
 
-## 快速开始
+📘 Documentation (bilingual):
 
-```bash
-uv sync                                    # 创建 .venv 并锁定依赖（推荐；无 uv 时直接用 python3）
-uv run conv-doc token rotate               # 生成 token（明文只显示一次）
-uv run conv-doc publish ~/work/proj-a --as proj-a
-uv run conv-doc serve                      # 127.0.0.1:8380
-```
+| | English | 中文 |
+|---|---|---|
+| Research report (why these wheels) | [docs/en/index.html](docs/en/index.html) | [docs/zh/index.html](docs/zh/index.html) |
+| Design & threat model | [docs/en/design.html](docs/en/design.html) | [docs/zh/design.html](docs/zh/design.html) |
+| Deployment & usage | [docs/en/deploy.html](docs/en/deploy.html) | [docs/zh/deploy.html](docs/zh/deploy.html) |
+| Security review (STRIDE) | [docs/en/security-review.html](docs/en/security-review.html) | [docs/zh/security-review.html](docs/zh/security-review.html) |
 
-> `uv run conv-doc` 与 `python3 -m conv_doc` 等价；服务端零第三方运行时依赖，没有 uv 也能直接跑。
+## Features
 
-常驻运行：`bash scripts/install-service.sh`（systemd 用户服务 + cloudflared ingress 配置片段）。
+- **Explicit grants** — nothing is exposed by default; `publish` / `unpublish` per directory, effective immediately
+- **Strictly read-only** — GET/HEAD only; WebDAV-style write verbs return 405
+- **Token auth** — Bearer token, server stores a SHA-256 hash only (config 0600), one-command rotation, per-source failure rate limiting
+- **Markdown & HTML rendering** — marked + DOMPurify + highlight.js (vendored), plus a script-sandboxed "full mode" for interactive HTML
+- **Path sandbox** — realpath containment, symlink-escape refusal, hidden files skipped, extension allowlist
+- **Zero third-party runtime dependencies** — Python 3.10+ standard library; the viewer is dependency-free TypeScript
+- **Bilingual UI** — English by default, one tap to switch to Chinese
 
-## 命令
-
-| 命令 | 作用 |
-|------|------|
-| `publish <dir> [--as NAME] [--docs-only]` | 显式发布目录（`--docs-only` 只放行文档与图片） |
-| `unpublish <name>` | 撤销发布 |
-| `list` | 查看发布清单 |
-| `token rotate` | 生成新 token 并使旧的失效 |
-| `serve [--host H] [--port P]` | 启动只读服务（默认 127.0.0.1:8380） |
-
-## 开发与验证
+## Quick start
 
 ```bash
-uv run pytest                              # 49 项：认证、只读、路径沙箱、ticket、响应头（或 python3 -m unittest discover -s tests）
-TOKEN=<token> node scripts/browser-smoke.mjs # 无头 Chrome 端到端：登录→浏览→渲染→沙箱
+uv sync                                # create .venv and lock deps (recommended; plain python3 also works)
+uv run conv-docs token rotate          # generate the token (printed once)
+uv run conv-docs publish ~/work/proj-a --as proj-a
+uv run conv-docs serve                 # 127.0.0.1:8380
 ```
 
-目录结构：
+> `uv run conv-docs` is equivalent to `python3 -m conv_docs`. The server has zero third-party runtime dependencies.
+
+Run as a service: `bash scripts/install-service.sh` (systemd user unit + a cloudflared ingress snippet).
+
+## Commands
+
+| Command | Purpose |
+|---------|---------|
+| `publish <dir> [--as NAME] [--docs-only]` | Publish a directory explicitly (`--docs-only` = documents and images only) |
+| `unpublish <name>` | Revoke a publish |
+| `list` | Show the publish list |
+| `token rotate` | Generate a new token and invalidate the old one |
+| `serve [--host H] [--port P]` | Start the read-only service (default 127.0.0.1:8380) |
+
+## Development & verification
+
+```bash
+uv run pytest                               # 49 unit tests: auth, read-only, path sandbox, tickets, headers
+TOKEN=<token> node scripts/browser-smoke.mjs # headless-Chrome end-to-end: login → browse → render → sandbox (17 checks)
+npm install && npm run build                # rebuild the TypeScript viewer (web-src/app.ts → src/conv_docs/web/app.js)
+```
+
+Project layout:
 
 ```
-conv_doc/          服务端（store 配置 / security 安全原语 / server HTTP）+ web/ 移动端查看器
-conv_doc/web/vendor/  渲染栈（marked 18.0.14 · DOMPurify 3.4.16 · highlight.js 11.12.0，含各自 LICENSE）
-tests/             测试（unittest 风格，pytest / unittest 均可跑）
-scripts/           install-service.sh · fetch-vendor.sh · browser-smoke.mjs
-docs/              HTML 文档（调研 / 设计 / 部署 / 安全评审）
-pyproject.toml     uv 项目定义（运行时零依赖，dev 组含 pytest）
-uv.lock            依赖锁文件（已提交，保证环境可复现）
+src/conv_docs/          Python package: server (store / security / http) + compiled web viewer
+src/conv_docs/web/      viewer bundle (compiled app.js is committed; vendored libs incl. licenses)
+web-src/app.ts          viewer source (TypeScript, strict)
+tests/                  test suite (unittest-style; runs under pytest or unittest)
+scripts/                install-service.sh · fetch-vendor.sh · browser-smoke.mjs
+docs/en/, docs/zh/      HTML documentation (bilingual)
+assets/                 logo (original artwork, MIT)
+pyproject.toml          uv project (zero runtime deps; dev group has pytest) · uv.lock committed
 ```
 
-## 安全
+## Security
 
-威胁模型与残余风险见 [方案设计](docs/design.html)，部署安全清单见 [部署手册](docs/deploy.html)。要点：用户内容永不以 `text/html` 返回（完整模式除外且强制 CSP sandbox 无 `allow-same-origin`）；token 只走 Authorization 头；审计日志 `~/.local/state/conv-doc/audit.log`。报告安全问题见 [SECURITY.md](SECURITY.md)。
+Threat model and residual risks: [docs/en/design.html](docs/en/design.html). Deployment checklist: [docs/en/deploy.html](docs/en/deploy.html). Key invariants: user content is **never** served as `text/html` (full mode excepted, forced CSP sandbox without `allow-same-origin`); the token travels only in the `Authorization` header; audit log at `~/.local/state/conv-docs/audit.log`. Report issues per [SECURITY.md](SECURITY.md).
 
-## 第三方组件
+## Third-party components
 
-| 组件 | 版本 | License | 用途 |
-|------|------|---------|------|
-| [marked](https://github.com/markedjs/marked) | 18.0.14 | MIT | Markdown 解析 |
-| [DOMPurify](https://github.com/cure53/DOMPurify) | 3.4.16 | Apache-2.0 | HTML/XSS 清洗 |
-| [highlight.js](https://github.com/highlightjs/highlight.js) | 11.12.0 | BSD-3-Clause | 代码高亮 |
+| Component | Version | License | Role |
+|-----------|---------|---------|------|
+| [marked](https://github.com/markedjs/marked) | 18.0.14 | MIT | Markdown parsing |
+| [DOMPurify](https://github.com/cure53/DOMPurify) | 3.4.16 | Apache-2.0 | HTML/XSS sanitisation |
+| [highlight.js](https://github.com/highlightjs/highlight.js) | 11.12.0 | BSD-3-Clause | Syntax highlighting |
 
-各组件许可证原文在 `conv_doc/web/vendor/LICENSE.*`。
+Each component keeps its own license; original texts live in `src/conv_docs/web/vendor/LICENSE.*`. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the full statement.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE). The logo (`assets/logo.svg`) is original artwork under the same MIT terms; it references no third-party intellectual property.

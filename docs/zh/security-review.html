@@ -3,25 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>conv-doc · 安全评审报告</title>
-<link rel="stylesheet" href="style.css">
+<title>conv-docs · 安全评审报告</title>
+<link rel="stylesheet" href="../style.css">
 </head>
 <body>
 <header class="site">
   <div class="inner">
-    <a class="brand" href="index.html">conv-doc 文档</a>
+    <a class="brand" href="index.html"><img src="../../src/conv_docs/web/favicon.svg" alt="" width="22" height="22"> conv-docs</a>
     <nav>
       <a href="index.html">调研报告</a>
       <a href="design.html">方案设计</a>
       <a href="deploy.html">部署与使用</a>
       <a class="active" href="security-review.html">安全评审</a>
+    <a href="../en/security-review.html">English</a>
     </nav>
   </div>
 </header>
 <main>
 
 <h1>安全评审报告</h1>
-<p class="lead">对 conv-doc 0.1.0 代码的 STRIDE 逐面评审。范围：HTTP 接口、认证、路径处理、配置与凭证存储、审计日志。评审方式为通读实际代码，每条发现给出定位、利用场景与处置。</p>
+<p class="lead">对 conv-docs 0.1.0 代码的 STRIDE 逐面评审。范围：HTTP 接口、认证、路径处理、配置与凭证存储、审计日志。评审方式为通读实际代码，每条发现给出定位、利用场景与处置。</p>
 <p class="meta">评审日期：2026-10-05 · 方法：STRIDE（欺骗 / 篡改 / 抵赖 / 信息泄露 / 拒绝服务 / 权限提升）</p>
 
 <h2>攻击面清单</h2>
@@ -31,7 +32,7 @@
   <tr><td>查询参数 <code>root</code> / <code>path</code> / <code>ticket</code></td><td>公网（经隧道）</td><td>全部按不可信输入处理</td></tr>
   <tr><td><code>Cf-Connecting-Ip</code> / <code>X-Forwarded-For</code> 头</td><td>公网（经隧道）/ 本机</td><td>隧道场景由 Cloudflare 边缘覆写；本机直连等同本机用户</td></tr>
   <tr><td>CLI 参数（publish 路径 / 名字）</td><td>本机用户</td><td>与 PC 账户同权限，属管理员操作</td></tr>
-  <tr><td>配置文件 <code>~/.config/conv-doc/config.json</code></td><td>本机</td><td>0600，仅存 token 哈希</td></tr>
+  <tr><td>配置文件 <code>~/.config/conv-docs/config.json</code></td><td>本机</td><td>0600，仅存 token 哈希</td></tr>
 </table>
 
 <h2>发现与处置</h2>
@@ -40,7 +41,7 @@
 <h3>M1 · 完整模式 iframe 无法携带凭证，沙箱页面实际加载失败 <span class="badge no">中 · 已修复</span></h3>
 <table>
   <tr><th style="width:90px">类别</th><td>信息泄露 / 设计偏差（Spoofing 与可用性交叉）</td></tr>
-  <tr><th>定位</th><td><code>conv_doc/server.py</code> 路由 <code>/api/v1/rawhtml</code>（曾要求 Bearer 认证）</td></tr>
+  <tr><th>定位</th><td><code>conv_docs/server.py</code> 路由 <code>/api/v1/rawhtml</code>（曾要求 Bearer 认证）</td></tr>
   <tr><th>场景</th><td>沙箱 iframe 由浏览器导航加载，无法携带 <code>Authorization</code> 头，请求必然 401——完整模式渲染的其实是一段 JSON 错误页。更糟的是修复方向若选错（把长期 token 放进 URL），会把凭证泄漏到浏览器历史与日志。</td></tr>
   <tr><th>处置</th><td>一次性 ticket 即该端点的唯一凭证：只能由持 token 的调用方换取（<code>html-ticket</code> 仍要求 Bearer），30 秒过期、单次使用、绑定文件路径；无效 ticket 计入限速与审计。网络层断言已加入浏览器冒烟测试（沙箱请求真实返回 HTTP 200 文档）。ticket 无法爆破（192 位随机）。</td></tr>
 </table>
@@ -48,7 +49,7 @@
 <h3>L1 · 来源键可伪造（直连暴露时绕过按 IP 限速）<span class="badge">低 · 已加固</span></h3>
 <table>
   <tr><th style="width:90px">类别</th><td>欺骗（Spoofing）</td></tr>
-  <tr><th>定位</th><td><code>conv_doc/server.py</code> <code>client_key()</code></td></tr>
+  <tr><th>定位</th><td><code>conv_docs/server.py</code> <code>client_key()</code></td></tr>
   <tr><th>场景</th><td>若服务被误配为公网直连（<code>--host 0.0.0.0</code>），攻击者可轮换伪造的 <code>Cf-Connecting-Ip</code> 绕过按来源的失败限速，并向审计日志灌入假来源。</td></tr>
   <tr><th>处置</th><td>信任边界是回环 + 隧道（部署手册明确禁止公网直连；隧道场景该头由 Cloudflare 边缘覆写，无法伪造）。已加固：来源键截断至 64 字符防日志与限速表污染。残余风险：256 位 token 本身不可爆破，限速只是纵深防御；如需更强保证，在 Cloudflare Access 后再加一层（部署手册第六节）。</td></tr>
 </table>
@@ -56,7 +57,7 @@
 <h3>L2 · 慢速连接可占用工作线程 <span class="badge">低 · 已修复</span></h3>
 <table>
   <tr><th style="width:90px">类别</th><td>拒绝服务（DoS）</td></tr>
-  <tr><th>定位</th><td><code>conv_doc/server.py</code> <code>DocgateHandler</code></td></tr>
+  <tr><th>定位</th><td><code>conv_docs/server.py</code> <code>DocgateHandler</code></td></tr>
   <tr><th>场景</th><td>不发完整请求的慢连接（slowloris）长时间占住线程。</td></tr>
   <tr><th>处置</th><td>处理器套接字超时 30 秒；URL 长度上限 4096；不读取请求体；线程为守护线程。</td></tr>
 </table>
@@ -64,7 +65,7 @@
 <h3>L3 · 大文件整块读入内存 <span class="badge">低 · 已修复</span></h3>
 <table>
   <tr><th style="width:90px">类别</th><td>拒绝服务（DoS）</td></tr>
-  <tr><th>定位</th><td><code>conv_doc/server.py</code> <code>_api_raw()</code>（曾 <code>fh.read()</code>）</td></tr>
+  <tr><th>定位</th><td><code>conv_docs/server.py</code> <code>_api_raw()</code>（曾 <code>fh.read()</code>）</td></tr>
   <tr><th>场景</th><td>发布目录内出现超大 PDF/图片时，一次请求把整个文件读进内存，多请求并发可耗尽内存。</td></tr>
   <tr><th>处置</th><td>改为按 64 KB 分块流式发送，<code>Content-Length</code> 取自文件大小。</td></tr>
 </table>
@@ -74,7 +75,7 @@
   <tr><th>STRIDE 面</th><th>防护</th><th>证据</th></tr>
   <tr><td>欺骗</td><td>token 哈希存储 + 常数时间比较；错/缺 token 一律 401；连续失败封禁</td><td>49 项单测含 401/429 矩阵</td></tr>
   <tr><td>篡改</td><td>无写入端点；方法白名单 GET/HEAD，WebDAV 动词 405；请求体不消费</td><td>单测覆盖 9 种写入动词</td></tr>
-  <tr><td>抵赖</td><td>JSONL 审计：认证失败、ticket 拒绝、文件访问（含来源、根、路径）；凭证永不入日志</td><td><code>~/.local/state/conv-doc/audit.log</code></td></tr>
+  <tr><td>抵赖</td><td>JSONL 审计：认证失败、ticket 拒绝、文件访问（含来源、根、路径）；凭证永不入日志</td><td><code>~/.local/state/conv-docs/audit.log</code></td></tr>
   <tr><td>信息泄露</td><td>用户内容永不以 <code>text/html</code> 返回（完整模式除外，强制 CSP sandbox 无 allow-same-origin）；路径沙箱（realpath 包含性、符号链接逃逸拒绝、隐藏文件跳过、扩展名白名单）；错误响应不含栈与本地路径</td><td>单测 + 实测（<code>../</code>、<code>.git</code>、越界符号链接均 404）</td></tr>
   <tr><td>拒绝服务</td><td>限速封禁、URL 上限、渲染体积上限、线程超时、流式发送</td><td>见 L2/L3 处置</td></tr>
   <tr><td>权限提升</td><td>只读设计天然无提权面；服务以普通用户身份跑 systemd 用户服务，绑定 127.0.0.1</td><td>部署手册安全清单</td></tr>
@@ -90,6 +91,6 @@
 </ul>
 
 </main>
-<footer>conv-doc · 安全评审报告 · 配套：<a href="design.html">方案设计（威胁模型）</a> · <a href="deploy.html">部署安全清单</a></footer>
+<footer>conv-docs · 安全评审报告 · 配套：<a href="design.html">方案设计（威胁模型）</a> · <a href="deploy.html">部署安全清单</a></footer>
 </body>
 </html>

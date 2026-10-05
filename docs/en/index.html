@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>conv-docs · Research Report</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="site">
+  <div class="inner">
+    <a class="brand" href="index.html"><img src="../../src/conv_docs/web/favicon.svg" alt="" width="22" height="22"> conv-docs</a>
+    <nav>
+      <a class="active" href="index.html">Research</a>
+      <a href="design.html">Design</a>
+      <a href="deploy.html">Deployment</a>
+      <a href="security-review.html">Security</a>
+      <a href="../zh/index.html">中文</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<h1>Research Report: Workspace Docs on Your Phone</h1>
+<p class="lead">The missing piece of the herdr workflow: read-only Markdown and HTML documents from any workspace, on your phone, without widening the PC's attack surface. This page records the requirements, the survey of existing tools, and the final selection.</p>
+<p class="meta">Researched 2026-10-05 · Evidence: GitHub API, Cloudflare docs, OWASP Cheat Sheet (sources listed at the bottom)</p>
+
+<h2>1. Requirements</h2>
+<table>
+  <tr><th style="width:120px">ID</th><th>Requirement</th><th>Why</th></tr>
+  <tr><td>R1 Explicit grant</td><td>Only explicitly authorised directories are visible on the phone</td><td>The tunnel must never become a backdoor to the whole PC filesystem</td></tr>
+  <tr><td>R2 Read-only</td><td>No editing on the phone</td><td>Document changes continue to go through the agent (herdr); the phone only consumes</td></tr>
+  <tr><td>R3 Rendering</td><td>Markdown and HTML rendering — HTML at minimum</td><td>Documents must be readable, not downloaded as source</td></tr>
+  <tr><td>R4 Token</td><td>Token required; no anonymous access</td><td>A public URL must not mean public content</td></tr>
+  <tr><td>R5 Safety</td><td>As secure as possible without hurting daily use</td><td>The existing herdr-remote control plane (Cloudflare + domain + relay) stays untouched</td></tr>
+</table>
+<p>Implicit constraints from the usage scenario: open on a phone at any time (no site build step), single user (no account system), and unreliable CDN access from some networks — so static assets must ship with the repo.</p>
+
+<h2>2. Method</h2>
+<p>Look for existing wheels first; only build what is missing. Every candidate was checked for three things:</p>
+<ul>
+  <li><strong>Capability fit</strong> — does it satisfy R1–R5 as-is, or does it need surgery?</li>
+  <li><strong>Popularity</strong> — GitHub stars (read via the GitHub API on 2026-10-05);</li>
+  <li><strong>Activity</strong> — last commit date and whether the repository is archived (archived = undependable).</li>
+</ul>
+
+<h2>3. Options considered</h2>
+
+<h3>Option A: extend the existing herdr-remote relay</h3>
+<p>Add a read-only <code>/docs</code> endpoint and a phone page to the relay, reusing its tunnel, token and audit log. Cheapest to deploy — but it grows the attack surface of the agent control plane itself: any flaw in document parsing or path handling sits right next to the WebSocket interface that commands the agents. That contradicts R5, so it was rejected.</p>
+
+<h3>Option B: off-the-shelf file servers</h3>
+<table>
+  <tr><th>Project</th><th class="center">Stars</th><th class="center">Last commit</th><th>Fit</th></tr>
+  <tr>
+    <td><a href="https://github.com/sigoden/dufs">sigoden/dufs</a></td>
+    <td class="center">10,835</td><td class="center">2026-06</td>
+    <td>Feature-rich (search, upload, WebDAV), usable read-only — but <strong>no Markdown rendering</strong>, Basic/Digest auth instead of Bearer tokens, and a single root per instance, so no per-workspace publishing. Its write features must be locked down even when unused.</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/svenstaro/miniserve">svenstaro/miniserve</a></td>
+    <td class="center">7,889</td><td class="center">2026-10</td>
+    <td>Stable and actively maintained read-only static server — but <strong>no Markdown rendering</strong>, HTTP Basic auth (password prompt on every visit; poor phone experience), and again a single root.</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/filebrowser/filebrowser">filebrowser/filebrowser</a></td>
+    <td class="center">35,927</td><td class="center">archived</td>
+    <td><span class="badge no">Repository archived</span> An editor-equipped drive — violates R2 — and unmaintained. Excluded.</td>
+  </tr>
+</table>
+<p>File servers solve "move bytes", not "render" or "publish on demand". Adding a rendering layer still leaves the authorisation model to write — at which point composing rendering libraries directly is the simpler path.</p>
+
+<h3>Option C: off-the-shelf documentation tools</h3>
+<table>
+  <tr><th>Project</th><th class="center">Stars</th><th class="center">Last commit</th><th>Fit</th></tr>
+  <tr>
+    <td><a href="https://github.com/docsifyjs/docsify">docsifyjs/docsify</a></td>
+    <td class="center">31,544</td><td class="center">2026-10</td>
+    <td>Client-side Markdown site with great rendering — but its model is "one site, one index.html + sidebar". <strong>No multi-root, on-demand publishing</strong> and no auth. Watching an arbitrary workspace would mean standing up and syncing a site per workspace, which defeats "open it anytime".</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/squidfunk/mkdocs-material">squidfunk/mkdocs-material</a></td>
+    <td class="center">27,540</td><td class="center">2026-10</td>
+    <td>Best-in-class static docs sites — but <strong>it needs a build step</strong>: a document the agent just wrote requires a rebuild before you can read it. Great for published docs, wrong for working docs.</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/dullage/flatnotes">dullage/flatnotes</a></td>
+    <td class="center">3,237</td><td class="center">2026-08</td>
+    <td>Self-hosted Markdown notes with a <strong>built-in editor</strong> (violates R2) and a single-library model; cannot browse several workspace directories.</td>
+  </tr>
+</table>
+
+<h3>Option D: a thin read-only gateway + battle-tested rendering stack (chosen)</h3>
+<p>Only the unavoidable glue is written by hand: explicit publish grants, token auth, a path sandbox, a read-only API. Rendering is delegated to mature open-source wheels, vendored into the repository:</p>
+<table>
+  <tr><th>Wheel</th><th class="center">Stars</th><th class="center">Last commit</th><th>License</th><th>Role</th></tr>
+  <tr>
+    <td><a href="https://github.com/markedjs/marked">markedjs/marked</a> v18.0.14</td>
+    <td class="center">37,223</td><td class="center">2026-10</td><td>MIT</td>
+    <td>Markdown → HTML in the browser, zero dependencies</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/cure53/DOMPurify">cure53/DOMPurify</a> 3.4.16</td>
+    <td class="center">17,439</td><td class="center">2026-10</td><td>Apache-2.0</td>
+    <td>HTML/XSS sanitisation. The OWASP XSS Prevention Cheat Sheet recommends sanitising user-authored HTML and names DOMPurify</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/highlightjs/highlight.js">highlightjs/highlight.js</a> 11.12.0</td>
+    <td class="center">25,003</td><td class="center">2026-09</td><td>BSD-3-Clause</td>
+    <td>Code-block syntax highlighting</td>
+  </tr>
+</table>
+<p>The server uses only the Python 3 standard library — the target machine (the PC running herdr) already has Python, installation is frictionless, and there is no runtime supply chain to speak of. The phone viewer is dependency-free TypeScript compiled to plain JavaScript.</p>
+
+<div class="callout ok">
+<p><strong>Conclusion:</strong> Option D. The gateway is custom because no existing product combines "multi-root, publish on demand + Bearer token + read-only + rendering" — while the genuinely risky and difficult parts (Markdown parsing, XSS sanitisation, syntax highlighting) are all left to libraries with 17k–37k stars that are actively maintained.</p>
+</div>
+
+<h2>4. Infrastructure checks</h2>
+<ul>
+  <li><strong>One tunnel, many services</strong>: a locally managed Cloudflare Tunnel maps hostnames to local services via ingress rules. Adding <code>docs.yourdomain</code> → <code>127.0.0.1:8380</code> leaves the relay's rules untouched — zero change to the control plane (source: Cloudflare "Published applications / configuration file").</li>
+  <li><strong>Free tier</strong>: publishing an application through a tunnel needs no paid plan; only Cloudflare Access (the optional second layer) needs Access seats.</li>
+  <li><strong>HTTPS</strong>: the tunnel edge terminates TLS; the service itself binds <code>127.0.0.1</code> only.</li>
+</ul>
+
+<h2>5. Evidence</h2>
+<table>
+  <tr><th>Claim</th><th>Source (read 2026-10-05)</th></tr>
+  <tr><td>Stars / last commit / archived state per project</td><td>GitHub REST API <code>api.github.com/repos/{owner}/{repo}</code>, one call per repository</td></tr>
+  <tr><td>One tunnel, many services; no paid plan to publish</td><td><a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/routing-to-tunnel/">Cloudflare · Published applications</a></td></tr>
+  <tr><td>Ingress-rule configuration</td><td><a href="https://developers.cloudflare.com/tunnel/features/locally-managed-tunnels/configuration-file/">Cloudflare · Locally-managed tunnel configuration file</a></td></tr>
+  <tr><td>User-authored HTML needs sanitisation; DOMPurify named</td><td><a href="https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html">OWASP XSS Prevention Cheat Sheet</a></td></tr>
+  <tr><td>dufs / miniserve / docsify / flatnotes capabilities</td><td>Each repository's README and CLI help text</td></tr>
+</table>
+
+<h2>6. Known trade-offs</h2>
+<ul>
+  <li><strong>No full-text search</strong>: the phone is for reading; filename filtering covers the basic case, and search can be added later.</li>
+  <li><strong>No multi-user model</strong>: one person, one token; revocation is global, and the simple model is the safer one.</li>
+  <li><strong>Full-fidelity HTML scripts are constrained</strong>: the default render is the sanitised one; interactive HTML with scripts goes through a sandboxed iframe (see Design). The browser sandbox limits those scripts — the price of protecting the token.</li>
+  <li><strong>Vendored assets instead of CDN</strong>: about 200 KB extra in the repo, in exchange for the phone working on weak networks and no CDN-side supply-chain risk.</li>
+</ul>
+
+</main>
+<footer>conv-docs · Research report · <a href="design.html">Design</a> · <a href="deploy.html">Deployment</a> · <a href="../zh/index.html">中文</a></footer>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>conv-docs · Security Review</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="site">
+  <div class="inner">
+    <a class="brand" href="index.html"><img src="../../src/conv_docs/web/favicon.svg" alt="" width="22" height="22"> conv-docs</a>
+    <nav>
+      <a href="index.html">Research</a>
+      <a href="design.html">Design</a>
+      <a href="deploy.html">Deployment</a>
+      <a class="active" href="security-review.html">Security</a>
+      <a href="../zh/security-review.html">中文</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<h1>Security Review</h1>
+<p class="lead">A STRIDE-based review of the conv-docs 0.1.0 code. Scope: HTTP surface, authentication, path handling, configuration and credential storage, audit logging. Method: read the actual code; every finding names its location, exploit scenario and disposition.</p>
+<p class="meta">Reviewed 2026-10-05 · Method: STRIDE (Spoofing / Tampering / Repudiation / Information disclosure / Denial of service / Elevation of privilege)</p>
+
+<h2>Attack surface</h2>
+<table>
+  <tr><th>Entry point</th><th>Reachable from</th><th>Trust assumption</th></tr>
+  <tr><td>HTTP routes <code>/api/v1/*</code> and static assets</td><td>Public internet (via tunnel)</td><td>Only token holders read content; health is unauthenticated</td></tr>
+  <tr><td>Query parameters <code>root</code> / <code>path</code> / <code>ticket</code></td><td>Public internet (via tunnel)</td><td>All treated as untrusted input</td></tr>
+  <tr><td><code>Cf-Connecting-Ip</code> / <code>X-Forwarded-For</code> headers</td><td>Public internet (via tunnel) / localhost</td><td>Behind the tunnel the Cloudflare edge overwrites them; local callers share the host anyway</td></tr>
+  <tr><td>CLI arguments (publish path / name)</td><td>Local user</td><td>Same privilege as the PC account — administrative operations</td></tr>
+  <tr><td>Config file <code>~/.config/conv-docs/config.json</code></td><td>Local</td><td>0600, token hash only</td></tr>
+</table>
+
+<h2>Findings and dispositions</h2>
+<p>Four actionable findings (1 medium, 3 low) — all fixed or hardened; five residual risks accepted and recorded.</p>
+
+<h3>M1 · The full-mode iframe cannot carry credentials; the sandbox page never actually loaded <span class="badge no">medium · fixed</span></h3>
+<table>
+  <tr><th style="width:100px">Category</td><td>Information disclosure / design deviation (Spoofing × availability)</td></tr>
+  <tr><th>Location</th><td><code>src/conv_docs/server.py</code>, route <code>/api/v1/rawhtml</code> (previously required Bearer auth)</td></tr>
+  <tr><th>Scenario</th><td>A sandboxed iframe is a browser navigation and cannot send an <code>Authorization</code> header, so the request always got 401 — "full mode" was rendering a JSON error page. A wrong fix (long-lived token in the URL) would have leaked credentials into browser history and logs.</td></tr>
+  <tr><th>Disposition</th><td>The one-shot ticket is now the sole credential for this endpoint: only an authenticated caller can obtain one (<code>html-ticket</code> still requires Bearer), tickets expire in 30 seconds, are single-use and file-bound; invalid tickets count toward rate limiting and the audit log. The browser smoke test asserts at network level that the sandboxed request really returns an HTTP 200 document. Tickets cannot be brute-forced (192-bit random).</td></tr>
+</table>
+
+<h3>L1 · The source key is spoofable (rate-limit bypass when exposed directly) <span class="badge">low · hardened</span></h3>
+<table>
+  <tr><th style="width:100px">Category</th><td>Spoofing</td></tr>
+  <tr><th>Location</th><td><code>src/conv_docs/server.py</code>, <code>client_key()</code></td></tr>
+  <tr><th>Scenario</th><td>If the service were misconfigured as directly public (<code>--host 0.0.0.0</code>), an attacker could rotate fake <code>Cf-Connecting-Ip</code> values to dodge per-source rate limiting and pollute the audit log.</td></tr>
+  <tr><th>Disposition</th><td>The trust boundary is loopback + tunnel (the deployment guide forbids direct exposure; behind the tunnel the header is set by the Cloudflare edge and cannot be spoofed). Hardened: source keys are truncated to 64 characters to keep logs and the limiter table clean. Residual: a 256-bit token cannot be brute-forced anyway, so the limiter is defence in depth; Cloudflare Access can add another layer (deployment guide §6).</td></tr>
+</table>
+
+<h3>L2 · Slow connections could pin worker threads <span class="badge">low · fixed</span></h3>
+<table>
+  <tr><th style="width:100px">Category</th><td>Denial of service</td></tr>
+  <tr><th>Location</th><td><code>src/conv_docs/server.py</code>, <code>DocgateHandler</code></td></tr>
+  <tr><th>Scenario</th><td>Slowloris-style clients holding sockets without completing a request.</td></tr>
+  <tr><th>Disposition</th><td>Per-connection socket timeout of 30 s; URL length cap 4096; request bodies never read; worker threads are daemons.</td></tr>
+</table>
+
+<h3>L3 · Large files were read into memory whole <span class="badge">low · fixed</span></h3>
+<table>
+  <tr><th style="width:100px">Category</th><td>Denial of service</td></tr>
+  <tr><th>Location</th><td><code>src/conv_docs/server.py</code>, <code>_api_raw()</code> (previously <code>fh.read()</code>)</td></tr>
+  <tr><th>Scenario</th><td>A multi-gigabyte PDF/image in a published directory would be loaded into memory per request; concurrent requests could exhaust RAM.</td></tr>
+  <tr><th>Disposition</th><td>Streamed in 64 KB chunks with <code>Content-Length</code> taken from the file size.</td></tr>
+</table>
+
+<h2>Verified protections</h2>
+<table>
+  <tr><th>STRIDE face</th><th>Protection</th><th>Evidence</th></tr>
+  <tr><td>Spoofing</td><td>Hashed token storage + constant-time compare; missing/wrong token → 401; repeated failures → block</td><td>49 unit tests incl. the 401/429 matrix</td></tr>
+  <tr><td>Tampering</td><td>No write endpoint; method allowlist GET/HEAD, WebDAV verbs 405; request bodies never consumed</td><td>Tests cover 9 write verbs</td></tr>
+  <tr><td>Repudiation</td><td>JSONL audit: failed auth, ticket rejections, file access (source, root, path); credentials never logged</td><td><code>~/.local/state/conv-docs/audit.log</code></td></tr>
+  <tr><td>Information disclosure</td><td>User content is never served as <code>text/html</code> (full mode excepted, with forced CSP sandbox, no allow-same-origin); path sandbox (realpath containment, symlink-escape refusal, hidden-file skip, extension allowlist); error responses carry no stack traces or local paths</td><td>Tests + live checks (<code>../</code>, <code>.git</code>, escaping symlinks all 404)</td></tr>
+  <tr><td>Denial of service</td><td>Rate limiting, URL cap, render-size cap, connection timeouts, streamed responses</td><td>See L2/L3 dispositions</td></tr>
+  <tr><td>Elevation of privilege</td><td>The read-only design offers no write surface; the service runs as a normal user in a systemd user unit bound to 127.0.0.1</td><td>Deployment guide security checklist</td></tr>
+</table>
+
+<h2>Accepted residual risks</h2>
+<ul>
+  <li><strong>Published content visibility</strong>: non-hidden sensitive files (e.g. passwords in a yaml) are readable by the token holder. Mitigate with <code>--docs-only</code> and pre-publish review.</li>
+  <li><strong>Full-mode scripts can phone home</strong>: the sandbox blocks same-origin access but not outbound requests. Use safe render for untrusted HTML.</li>
+  <li><strong>Token = everything</strong>: with a single token, leakage equals document-set leakage. Mitigate with instant <code>token rotate</code>; the audit log reveals abnormal access.</li>
+  <li><strong>Fail-open rate limiting</strong>: the global failure cap blocks only the offending source key, prioritising owner availability (no self-lockout). Brute force is infeasible over a 256-bit token space.</li>
+  <li><strong>Symlink TOCTOU inside published roots</strong>: a concurrent modification between check and read could slip past containment. Inside the trust boundary (editing the root requires local access already); not further mitigated.</li>
+</ul>
+
+</main>
+<footer>conv-docs · Security review · <a href="design.html">Design (threat model)</a> · <a href="deploy.html">Deployment checklist</a> · <a href="../zh/security-review.html">中文</a></footer>
+</body>
+</html>

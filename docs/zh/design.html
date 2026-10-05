@@ -3,25 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>conv-doc · 方案设计</title>
-<link rel="stylesheet" href="style.css">
+<title>conv-docs · 方案设计</title>
+<link rel="stylesheet" href="../style.css">
 </head>
 <body>
 <header class="site">
   <div class="inner">
-    <a class="brand" href="index.html">conv-doc 文档</a>
+    <a class="brand" href="index.html"><img src="../../src/conv_docs/web/favicon.svg" alt="" width="22" height="22"> conv-docs</a>
     <nav>
       <a href="index.html">调研报告</a>
       <a class="active" href="design.html">方案设计</a>
       <a href="deploy.html">部署与使用</a>
       <a href="security-review.html">安全评审</a>
+    <a href="../en/design.html">English</a>
     </nav>
   </div>
 </header>
 <main>
 
 <h1>方案设计</h1>
-<p class="lead">conv-doc 是一个独立的只读文档网关：把 PC 上<strong>显式发布</strong>的 workspace 目录，通过 Cloudflare Tunnel 上的独立子域名，以 token 认证的方式提供给手机端渲染阅读。本页是实现蓝图与安全模型。</p>
+<p class="lead">conv-docs 是一个独立的只读文档网关：把 PC 上<strong>显式发布</strong>的 workspace 目录，通过 Cloudflare Tunnel 上的独立子域名，以 token 认证的方式提供给手机端渲染阅读。本页是实现蓝图与安全模型。</p>
 
 <h2>一、目标与非目标</h2>
 <div class="cards">
@@ -42,7 +43,7 @@
 docs.你的域名 ──── Cloudflare Tunnel（与 relay 同一隧道，独立 ingress 规则）
    │
    ▼
-conv-doc 服务（127.0.0.1:8380，Python 标准库）
+conv-docs 服务（127.0.0.1:8380，Python 标准库）
    ├─ 认证层   Bearer token（哈希存储 + 常数时间比较 + 失败限速）
    ├─ 授权层   发布清单（publish / unpublish 显式管理）
    ├─ 文件层   路径沙箱（realpath 包含性检查、符号链接逃逸拒绝、隐藏文件跳过、扩展名白名单）
@@ -57,19 +58,19 @@ herdr-remote relay :8375 ── 控制通道，完全不动</div>
 <h2>三、核心概念</h2>
 <table>
   <tr><th style="width:140px">概念</th><th>定义</th></tr>
-  <tr><td>发布根（root）</td><td>一条 <code>名字 → 绝对目录</code> 的映射，由 <code>conv-doc publish</code> 显式添加、<code>conv-doc unpublish</code> 撤销，持久化在配置文件里。默认没有任何发布根——刚装完的 conv-doc 看不到任何文件。</td></tr>
-  <tr><td>token</td><td>256 位随机值，服务端只保存它的 SHA-256 哈希（配置文件 0600）。手机端输入一次保存在浏览器本地。支持 <code>conv-doc token rotate</code> 一键吊销旧 token。</td></tr>
+  <tr><td>发布根（root）</td><td>一条 <code>名字 → 绝对目录</code> 的映射，由 <code>conv-docs publish</code> 显式添加、<code>conv-docs unpublish</code> 撤销，持久化在配置文件里。默认没有任何发布根——刚装完的 conv-docs 看不到任何文件。</td></tr>
+  <tr><td>token</td><td>256 位随机值，服务端只保存它的 SHA-256 哈希（配置文件 0600）。手机端输入一次保存在浏览器本地。支持 <code>conv-docs token rotate</code> 一键吊销旧 token。</td></tr>
   <tr><td>路径沙箱</td><td>所有文件访问先把相对路径解析为 realpath，再验证其仍位于某个发布根之内；任何逃逸（<code>../</code>、绝对路径、指向外部的符号链接）都拒绝。</td></tr>
   <tr><td>一次性 ticket</td><td>HTML 完整模式专用：换取一个 30 秒有效、单次使用的 ticket，再带 ticket 打开沙箱页面。避免把长期 token 放进 URL。</td></tr>
 </table>
 
 <h2>四、命令行接口</h2>
-<pre><code>$ uv run conv-doc publish ~/work/proj-a --as proj-a   # 显式发布
-$ uv run conv-doc list                                  # 查看发布清单
-$ uv run conv-doc unpublish proj-a                      # 撤销
-$ uv run conv-doc token rotate                          # 生成/轮换 token（明文只显示一次）
-$ uv run conv-doc serve --host 127.0.0.1 --port 8380    # 启动服务</code></pre>
-<p>配置文件 <code>~/.config/conv-doc/config.json</code>（权限 0600），审计日志 <code>~/.local/state/conv-doc/audit.log</code>（JSONL）。</p>
+<pre><code>$ uv run conv-docs publish ~/work/proj-a --as proj-a   # 显式发布
+$ uv run conv-docs list                                  # 查看发布清单
+$ uv run conv-docs unpublish proj-a                      # 撤销
+$ uv run conv-docs token rotate                          # 生成/轮换 token（明文只显示一次）
+$ uv run conv-docs serve --host 127.0.0.1 --port 8380    # 启动服务</code></pre>
+<p>配置文件 <code>~/.config/conv-docs/config.json</code>（权限 0600），审计日志 <code>~/.local/state/conv-docs/audit.log</code>（JSONL）。发布清单热加载：publish / unpublish 即时生效；<code>token rotate</code> 会把新 token 顺带写入同目录 <code>token.txt</code>（0600）。移动端查看器用 TypeScript 编写（<code>web-src/app.ts</code>，编译产物已提交），界面默认英文、内置中文切换。</p>
 
 <h2>五、HTTP API（/api/v1）</h2>
 <p>除 health 外全部要求 <code>Authorization: Bearer &lt;token&gt;</code>；唯一例外是 <code>rawhtml</code>——它是浏览器 iframe 导航，无法携带请求头，改以一次性 ticket 作为该端点的凭证（ticket 也只发给持 token 的调用方）。只接受 GET/HEAD，其余方法返回 405（明确拒绝 WebDAV 类动词）。</p>
@@ -123,6 +124,6 @@ $ uv run conv-doc serve --host 127.0.0.1 --port 8380    # 启动服务</code></p
 </table>
 
 </main>
-<footer>conv-doc · 方案设计 · 配套页面：<a href="index.html">调研报告</a> · <a href="deploy.html">部署与使用</a></footer>
+<footer>conv-docs · 方案设计 · 配套页面：<a href="index.html">调研报告</a> · <a href="deploy.html">部署与使用</a></footer>
 </body>
 </html>
