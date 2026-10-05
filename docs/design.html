@@ -64,11 +64,11 @@ herdr-remote relay :8375 ── 控制通道，完全不动</div>
 </table>
 
 <h2>四、命令行接口</h2>
-<pre><code>$ python3 -m conv_doc publish ~/work/proj-a --as proj-a   # 显式发布
-$ python3 -m conv_doc list                                  # 查看发布清单
-$ python3 -m conv_doc unpublish proj-a                      # 撤销
-$ python3 -m conv_doc token rotate                          # 生成/轮换 token（明文只显示一次）
-$ python3 -m conv_doc serve --host 127.0.0.1 --port 8380    # 启动服务</code></pre>
+<pre><code>$ uv run conv-doc publish ~/work/proj-a --as proj-a   # 显式发布
+$ uv run conv-doc list                                  # 查看发布清单
+$ uv run conv-doc unpublish proj-a                      # 撤销
+$ uv run conv-doc token rotate                          # 生成/轮换 token（明文只显示一次）
+$ uv run conv-doc serve --host 127.0.0.1 --port 8380    # 启动服务</code></pre>
 <p>配置文件 <code>~/.config/conv-doc/config.json</code>（权限 0600），审计日志 <code>~/.local/state/conv-doc/audit.log</code>（JSONL）。</p>
 
 <h2>五、HTTP API（/api/v1）</h2>

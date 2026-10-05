@@ -21,10 +21,13 @@
 ## 快速开始
 
 ```bash
-python3 -m conv_doc token rotate                    # 生成 token（明文只显示一次）
-python3 -m conv_doc publish ~/work/proj-a --as proj-a
-python3 -m conv_doc serve                           # 127.0.0.1:8380
+uv sync                                    # 创建 .venv 并锁定依赖（推荐；无 uv 时直接用 python3）
+uv run conv-doc token rotate               # 生成 token（明文只显示一次）
+uv run conv-doc publish ~/work/proj-a --as proj-a
+uv run conv-doc serve                      # 127.0.0.1:8380
 ```
+
+> `uv run conv-doc` 与 `python3 -m conv_doc` 等价；服务端零第三方运行时依赖，没有 uv 也能直接跑。
 
 常驻运行：`bash scripts/install-service.sh`（systemd 用户服务 + cloudflared ingress 配置片段）。
 
@@ -41,7 +44,7 @@ python3 -m conv_doc serve                           # 127.0.0.1:8380
 ## 开发与验证
 
 ```bash
-python3 -m unittest discover -s tests        # 49 项：认证、只读、路径沙箱、ticket、响应头
+uv run pytest                              # 49 项：认证、只读、路径沙箱、ticket、响应头（或 python3 -m unittest discover -s tests）
 TOKEN=<token> node scripts/browser-smoke.mjs # 无头 Chrome 端到端：登录→浏览→渲染→沙箱
 ```
 
@@ -50,9 +53,11 @@ TOKEN=<token> node scripts/browser-smoke.mjs # 无头 Chrome 端到端：登录�
 ```
 conv_doc/          服务端（store 配置 / security 安全原语 / server HTTP）+ web/ 移动端查看器
 conv_doc/web/vendor/  渲染栈（marked 18.0.14 · DOMPurify 3.4.16 · highlight.js 11.12.0，含各自 LICENSE）
-tests/            标准库 unittest 测试
-scripts/          install-service.sh · fetch-vendor.sh · browser-smoke.mjs
-docs/             HTML 文档（调研 / 设计 / 部署）
+tests/             测试（unittest 风格，pytest / unittest 均可跑）
+scripts/           install-service.sh · fetch-vendor.sh · browser-smoke.mjs
+docs/              HTML 文档（调研 / 设计 / 部署 / 安全评审）
+pyproject.toml     uv 项目定义（运行时零依赖，dev 组含 pytest）
+uv.lock            依赖锁文件（已提交，保证环境可复现）
 ```
 
 ## 安全

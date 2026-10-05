@@ -10,8 +10,12 @@ CONFIG="${CONV_DOC_CONFIG:-$HOME/.config/conv-doc/config.json}"
 UNIT_DIR="$HOME/.config/systemd/user"
 UNIT="$UNIT_DIR/conv-doc.service"
 
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [ -z "$PYTHON_BIN" ] && [ -x "$REPO_DIR/.venv/bin/python" ]; then
+  PYTHON_BIN="$REPO_DIR/.venv/bin/python"   # uv sync 创建的项目环境
+fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1 && [ ! -x "$PYTHON_BIN" ]; then
   echo "错误：找不到 python3" >&2
   exit 1
 fi
@@ -31,7 +35,6 @@ if ! grep -q '"token_sha256": "[0-9a-f]\{64\}"' "$CONFIG" 2>/dev/null; then
   echo "尚未设置访问 token，正在生成："
   (cd "$REPO_DIR" && "$PYTHON_BIN" -m conv_doc --config "$CONFIG" token rotate)
 fi
-
 # 2. systemd 用户服务
 mkdir -p "$UNIT_DIR"
 cat > "$UNIT" <<EOF
@@ -77,7 +80,10 @@ cat <<EOF
 
 herdr-remote relay 的规则与 token 无需任何改动。
 
-手机端打开 https://$HOSTNAME ，输入 token：
+手机端打开 https://$HOSTNAME ，输入 token。
 
-  python3 -m conv_doc --config $CONFIG token rotate   # 需要轮换时
+常用命令（在 $REPO_DIR 下，uv run conv-doc 等价于 python3 -m conv_doc）：
+
+  uv run conv-doc token rotate   # 轮换 token（旧的立即失效）
+  uv run conv-doc list           # 查看发布清单
 EOF

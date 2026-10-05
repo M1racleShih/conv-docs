@@ -1,4 +1,28 @@
+# ---- Python ----
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
 .pytest_cache/
-/tmp/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ---- Node（仅 browser-smoke.mjs 开发期冒烟测试用）----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ---- 系统 / 编辑器 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# ---- 本地私密状态（token、审计等绝不入库）----
+*.local.env
+secrets.env

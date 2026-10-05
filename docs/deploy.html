@@ -25,7 +25,8 @@
 
 <h2>一、依赖</h2>
 <ul>
-  <li>Python 3.10+（服务端零第三方依赖，只用标准库）</li>
+  <li>Python 3.10+（服务端零第三方运行时依赖，只用标准库）</li>
+  <li><a href="https://docs.astral.sh/uv/">uv</a>（推荐）：管理项目环境与依赖锁定，<code>uv sync</code> 一键就绪；没有 uv 直接用 <code>python3 -m conv_doc</code> 也可以</li>
   <li><code>cloudflared</code>（接入你已有的 Cloudflare Tunnel；herdr-remote 在用的那个即可）</li>
   <li>systemd（可选，用于常驻；不用 systemd 也能直接前台运行）</li>
 </ul>
@@ -33,14 +34,17 @@
 <h2>二、安装与首次启动</h2>
 <pre><code>git clone &lt;本仓库&gt; conv-doc &amp;&amp; cd conv-doc
 
+# 0. 准备环境（uv；等价做法：python3 -m conv_doc ...）
+uv sync
+
 # 1. 生成访问 token（明文只显示一次，保存到手机）
-python3 -m conv_doc token rotate
+uv run conv-doc token rotate
 
 # 2. 显式发布一个 workspace 目录（默认什么都不暴露）
-python3 -m conv_doc publish ~/work/proj-a --as proj-a
+uv run conv-doc publish ~/work/proj-a --as proj-a
 
 # 3. 启动（默认只监听 127.0.0.1:8380）
-python3 -m conv_doc serve</code></pre>
+uv run conv-doc serve</code></pre>
 <p>本机浏览器打开 <code>http://127.0.0.1:8380</code> 验证：输入 token 后应能看到已发布的目录。</p>
 
 <h3>常驻运行（systemd 用户服务）</h3>
@@ -76,10 +80,10 @@ systemctl --user restart cloudflared   # 或你现有的 cloudflared 运行方�
 <h2>五、日常运维</h2>
 <table>
   <tr><th>想做什么</th><th>命令 / 操作</th></tr>
-  <tr><td>新增一个 workspace</td><td><code>python3 -m conv_doc publish &lt;目录&gt; --as &lt;名字&gt;</code>，即时生效，无需重启</td></tr>
-  <tr><td>撤销某个 workspace</td><td><code>python3 -m conv_doc unpublish &lt;名字&gt;</code>，即时生效</td></tr>
-  <tr><td>查看发布清单</td><td><code>python3 -m conv_doc list</code></td></tr>
-  <tr><td>token 泄漏 / 定期轮换</td><td><code>python3 -m conv_doc token rotate</code>（旧 token 立即失效，手机重新输入）</td></tr>
+  <tr><td>新增一个 workspace</td><td><code>uv run conv-doc publish &lt;目录&gt; --as &lt;名字&gt;</code>，即时生效，无需重启</td></tr>
+  <tr><td>撤销某个 workspace</td><td><code>uv run conv-doc unpublish &lt;名字&gt;</code>，即时生效</td></tr>
+  <tr><td>查看发布清单</td><td><code>uv run conv-doc list</code></td></tr>
+  <tr><td>token 泄漏 / 定期轮换</td><td><code>uv run conv-doc token rotate</code>（旧 token 立即失效，手机重新输入）</td></tr>
   <tr><td>只放行文档与图片</td><td>发布时加 <code>--docs-only</code>（代码、数据文件一律不出现在列表）</td></tr>
   <tr><td>查看访问审计</td><td><code>tail -f ~/.local/state/conv-doc/audit.log</code>（JSONL：认证失败、发布变更、文件访问）</td></tr>
   <tr><td>配置文件</td><td><code>~/.config/conv-doc/config.json</code>（0600，只存 token 哈希，不存明文）</td></tr>
