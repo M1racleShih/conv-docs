@@ -3,7 +3,7 @@
 # 平时不需要运行——仓库已内置这些文件；仅在升级版本时使用。
 set -euo pipefail
 
-VENDOR_DIR="$(cd "$(dirname "$0")/.." && pwd)/conv_doc/web/vendor"
+VENDOR_DIR="$(cd "$(dirname "$0")/.." && pwd)/conv_docs/web/vendor"
 MARKED_VER="18.0.14"
 DOMPURIFY_VER="3.4.16"
 HLJS_VER="11.12.0"

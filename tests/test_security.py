@@ -6,9 +6,9 @@ import tempfile
 import time
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from conv_doc.security import (  # noqa: E402
+from conv_docs.security import (  # noqa: E402
     AuthRateLimiter,
     PathViolation,
     classify,

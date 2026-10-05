@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# 安装 conv-doc 为 systemd 用户服务，并给出 cloudflared ingress 配置片段。
+# 安装 conv-docs 为 systemd 用户服务，并给出 cloudflared ingress 配置片段。
 # 幂等：重复运行会更新 unit 并重启服务。
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PORT="${CONV_DOC_PORT:-8380}"
-HOST="${CONV_DOC_HOST:-127.0.0.1}"
-CONFIG="${CONV_DOC_CONFIG:-$HOME/.config/conv-doc/config.json}"
+PORT="${CONV_DOCS_PORT:-8380}"
+HOST="${CONV_DOCS_HOST:-127.0.0.1}"
+CONFIG="${CONV_DOCS_CONFIG:-$HOME/.config/conv-docs/config.json}"
 UNIT_DIR="$HOME/.config/systemd/user"
-UNIT="$UNIT_DIR/conv-doc.service"
+UNIT="$UNIT_DIR/conv-docs.service"
 
 PYTHON_BIN="${PYTHON_BIN:-}"
 if [ -z "$PYTHON_BIN" ] && [ -x "$REPO_DIR/.venv/bin/python" ]; then
@@ -26,25 +26,25 @@ if [ ! -f "$CONFIG" ]; then
   mkdir -p "$(dirname "$CONFIG")"
   chmod 700 "$(dirname "$CONFIG")"
 fi
-if ! "$PYTHON_BIN" -m conv_doc --config "$CONFIG" list >/dev/null 2>&1; then
-  echo "错误：conv-doc 无法载入配置（在 $REPO_DIR 下运行 python3 -m conv_doc list 检查）" >&2
+if ! "$PYTHON_BIN" -m conv_docs --config "$CONFIG" list >/dev/null 2>&1; then
+  echo "错误：conv-docs 无法载入配置（在 $REPO_DIR 下运行 python3 -m conv_docs list 检查）" >&2
   exit 1
 fi
 
 if ! grep -q '"token_sha256": "[0-9a-f]\{64\}"' "$CONFIG" 2>/dev/null; then
   echo "尚未设置访问 token，正在生成："
-  (cd "$REPO_DIR" && "$PYTHON_BIN" -m conv_doc --config "$CONFIG" token rotate)
+  (cd "$REPO_DIR" && "$PYTHON_BIN" -m conv_docs --config "$CONFIG" token rotate)
 fi
 # 2. systemd 用户服务
 mkdir -p "$UNIT_DIR"
 cat > "$UNIT" <<EOF
 [Unit]
-Description=conv-doc - read-only workspace docs gateway
+Description=conv-docs - read-only workspace docs gateway
 After=network-online.target
 
 [Service]
 WorkingDirectory=$REPO_DIR
-ExecStart=$PYTHON_BIN -m conv_doc --config $CONFIG serve --host $HOST --port $PORT
+ExecStart=$PYTHON_BIN -m conv_docs --config $CONFIG serve --host $HOST --port $PORT
 Restart=on-failure
 RestartSec=3
 
@@ -53,12 +53,12 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable --now conv-doc.service
+systemctl --user enable --now conv-docs.service
 sleep 1
-systemctl --user --no-pager status conv-doc.service | head -8 || true
+systemctl --user --no-pager status conv-docs.service | head -8 || true
 
 # 3. cloudflared ingress 片段
-HOSTNAME="${CONV_DOC_HOSTNAME:-docs.你的域名}"
+HOSTNAME="${CONV_DOCS_HOSTNAME:-docs.你的域名}"
 cat <<EOF
 
 ─── 下一步：接入 Cloudflare Tunnel ───────────────────────────────
@@ -82,8 +82,8 @@ herdr-remote relay 的规则与 token 无需任何改动。
 
 手机端打开 https://$HOSTNAME ，输入 token。
 
-常用命令（在 $REPO_DIR 下，uv run conv-doc 等价于 python3 -m conv_doc）：
+常用命令（在 $REPO_DIR 下，uv run conv-docs 等价于 python3 -m conv_docs）：
 
-  uv run conv-doc token rotate   # 轮换 token（旧的立即失效）
-  uv run conv-doc list           # 查看发布清单
+  uv run conv-docs token rotate   # 轮换 token（旧的立即失效）
+  uv run conv-docs list           # 查看发布清单
 EOF

@@ -1,0 +1,13 @@
+{
+  "name": "conv-docs-web",
+  "private": true,
+  "description": "conv-docs mobile viewer — TypeScript source (builds to src/conv_docs/web/app.js)",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

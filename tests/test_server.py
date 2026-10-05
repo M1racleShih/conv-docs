@@ -9,10 +9,10 @@ import threading
 import time
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
-from conv_doc.server import DocgateServer  # noqa: E402
-from conv_doc.store import ConfigStore  # noqa: E402
+from conv_docs.server import DocgateServer  # noqa: E402
+from conv_docs.store import ConfigStore  # noqa: E402
 
 TOKEN = "test-token-abcdefgh-12345678"
 
@@ -58,7 +58,7 @@ class ServerTests(unittest.TestCase):
         cls.store.publish(cls.root2_dir, name="ws2")
 
         cls.server = DocgateServer(("127.0.0.1", 0), cls.store,
-                                   audit=__import__("conv_doc.server", fromlist=["AuditLog"]).AuditLog(
+                                   audit=__import__("conv_docs.server", fromlist=["AuditLog"]).AuditLog(
                                        os.path.join(cls.tmp.name, "audit.log")))
         cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
@@ -275,7 +275,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", headers["Content-Type"])
         self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
-        self.assertIn("conv-doc", data.decode("utf-8"))
+        self.assertIn("conv-docs", data.decode("utf-8"))
 
     def test_vendor_served(self):
         for name in ["marked.umd.js", "purify.min.js", "highlight.min.js", "github.min.css"]:

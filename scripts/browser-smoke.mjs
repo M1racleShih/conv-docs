@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 浏览器端到端冒烟测试（需本机 Chrome + 已运行的 conv-doc）。
+ * 浏览器端到端冒烟测试（需本机 Chrome + 已运行的 conv-docs）。
  *
  *   TOKEN=... BASE=http://127.0.0.1:8380 node scripts/browser-smoke.mjs
  *
@@ -27,7 +27,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chrome = spawn(CHROME, [
   "--headless", "--no-first-run", "--disable-gpu",
   `--remote-debugging-port=${PORT}`,
-  `--user-data-dir=/tmp/conv-doc-smoke-profile-${process.pid}`,
+  `--user-data-dir=/tmp/conv-docs-smoke-profile-${process.pid}`,
   "about:blank",
 ], { stdio: "ignore" });
 process.on("exit", () => { try { chrome.kill(); } catch {} });
@@ -96,7 +96,7 @@ function check(name, ok, detail = "") {
 
 // 1. 登录：写入 token 并进入工作区列表
 await navigate("#/login");
-await evalJs(`localStorage.setItem("conv-doc.token", ${JSON.stringify(TOKEN)}); location.hash = "#/"; "ok"`);
+await evalJs(`localStorage.setItem("conv-docs.token", ${JSON.stringify(TOKEN)}); location.hash = "#/"; "ok"`);
 await waitFor(async () => (await evalJs(`document.querySelectorAll(".list-item").length`)) > 0, "工作区列表");
 const rootsText = await evalJs(`document.getElementById("app").innerText`);
 check("登录后看到已发布工作区", rootsText.includes(ROOT), ROOT);
@@ -142,8 +142,17 @@ const styled = await waitFor(async () => {
 }, "文档样式内联", 8000).catch(() => 0);
 check("文档样式被保留/内联", styled > 0, `${styled} 处`);
 
-// 5. 完整模式：沙箱 iframe + 一次性 ticket
-await evalJs(`Array.from(document.querySelectorAll(".mode-bar button")).find(b => b.innerText.includes("完整模式")).click(); "ok"`);
+// 5. 双语切换：默认英文，点击切中文
+check("UI 默认英文", (await evalJs(`document.querySelector(".breadcrumb a, h1") ? "yes" : "yes"`)) === "yes" &&
+  (await evalJs(`document.getElementById("app").innerText`)).includes("Workspaces"));
+await evalJs(`document.getElementById("lang-btn").click(); "ok"`);
+await sleep(400);
+check("一键切中文", (await evalJs(`document.getElementById("app").innerText`)).includes("工作区"));
+await evalJs(`document.getElementById("lang-btn").click(); "ok"`);
+await sleep(400);
+
+// 6. 完整模式：沙箱 iframe + 一次性 ticket
+await evalJs(`Array.from(document.querySelectorAll(".mode-bar button")).find(b => b.innerText.includes("Full mode")).click(); "ok"`);
 const frame = await waitFor(async () => {
   return await evalJs(`(function(){var f=document.querySelector(".raw-frame");return f&&f.src?"yes":null})()`);
 }, "完整模式 iframe").catch(() => null);
