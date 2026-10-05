@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docgate · 调研报告：手机端 workspace 文档查看</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <div class="inner">
+    <a class="brand" href="index.html">docgate 文档</a>
+    <nav>
+      <a class="active" href="index.html">调研报告</a>
+      <a href="design.html">方案设计</a>
+      <a href="deploy.html">部署与使用</a>
+      <a href="security-review.html">安全评审</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<h1>调研报告：手机端灵活查看 workspace 文档</h1>
+<p class="lead">herdr 工作流缺少的一环：在不扩大 PC 暴露面的前提下，随时在手机上只读查看某个 workspace 的 Markdown 与 HTML 文档。本页记录需求、调研过程、候选方案对比和最终选型。</p>
+<p class="meta">调研日期：2026-10-05 · 数据来源：GitHub API、Cloudflare 官方文档、OWASP Cheat Sheet（文末列证据）</p>
+
+<h2>一、需求清单</h2>
+<table>
+  <tr><th style="width:130px">编号</th><th>需求</th><th>说明</th></tr>
+  <tr><td>R1 明确授权</td><td>只有显式授权的目录才能在手机上看到</td><td>防止隧道变成「整个 PC 文件系统可读」的后门</td></tr>
+  <tr><td>R2 只读</td><td>手机端不提供编辑能力</td><td>改文档继续走 agent（herdr），手机只消费</td></tr>
+  <tr><td>R3 渲染</td><td>支持 Markdown 和 HTML 渲染，至少 HTML</td><td>文档要「能看」，不是下载源码</td></tr>
+  <tr><td>R4 认证</td><td>必须持 token 访问，不能匿名</td><td>公网 URL 不等于公开内容</td></tr>
+  <tr><td>R5 安全</td><td>在不影响现有使用的前提下尽可能安全</td><td>现有 herdr-remote 控制通道（Cloudflare + 域名 + relay）零改动</td></tr>
+</table>
+<p>使用场景的隐含约束：手机随时打开（无需先构建站点）、无需账号体系（单人使用）、网络环境可能访问公共 CDN 不稳定（静态资源应本地内置）。</p>
+
+<h2>二、调研方法</h2>
+<p>先找现成轮子，找不到或不匹配再造。对每个候选检查三件事：</p>
+<ul>
+  <li><strong>能力匹配</strong>——是否原生满足 R1–R5，还是需要魔改；</li>
+  <li><strong>受欢迎程度</strong>——GitHub star 数（截至 2026-10-05 由 GitHub API 读取）；</li>
+  <li><strong>活跃程度</strong>——最近一次提交时间、仓库是否已归档（归档即不可依赖）。</li>
+</ul>
+
+<h2>三、候选方案对比</h2>
+
+<h3>方案 A：扩展现有 herdr-remote relay</h3>
+<p>在 relay 上加 <code>/docs</code> 只读接口和手机页面，复用现有隧道、token 和审计日志。部署最省事，但文档功能直接扩大了 agent 控制通道的攻击面——文档解析、路径处理的任何漏洞都能摸到发号施令的 WebSocket 接口。与 R5 的「不影响现有使用」相悖，放弃。</p>
+
+<h3>方案 B：现成文件服务器</h3>
+<table>
+  <tr><th>项目</th><th class="center">Star</th><th class="center">最近提交</th><th>能力匹配</th></tr>
+  <tr>
+    <td><a href="https://github.com/sigoden/dufs">sigoden/dufs</a></td>
+    <td class="center">10,835</td><td class="center">2026-06</td>
+    <td>功能全（搜索、上传、WebDAV），默认只读可用；但<strong>无 Markdown 渲染</strong>，认证是 Basic/Digest 而非 Bearer token，且单实例单根目录，无法按需发布多个 workspace。写入能力（上传/删除/WebDAV）即使不用，也要逐一关闭才能放心。</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/svenstaro/miniserve">svenstaro/miniserve</a></td>
+    <td class="center">7,889</td><td class="center">2026-10</td>
+    <td>纯只读静态服务，稳定活跃；但<strong>无 Markdown 渲染</strong>，认证是 HTTP Basic（每次弹窗输密码，手机体验差），同样单根目录。</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/filebrowser/filebrowser">filebrowser/filebrowser</a></td>
+    <td class="center">35,927</td><td class="center">已归档</td>
+    <td><span class="badge no">仓库已归档</span> 功能上是带编辑器的网盘，违反 R2，且归档后无维护，直接排除。</td>
+  </tr>
+</table>
+<p>结论：文件服务器解决「把文件递出去」，不解决「渲染」和「按需发布」；要么放弃 R3，要么给它们套一层渲染层——套完之后仍然要自己写授权模型，不如直接组合渲染轮子自建网关。</p>
+
+<h3>方案 C：现成文档站工具</h3>
+<table>
+  <tr><th>项目</th><th class="center">Star</th><th class="center">最近提交</th><th>能力匹配</th></tr>
+  <tr>
+    <td><a href="https://github.com/docsifyjs/docsify">docsifyjs/docsify</a></td>
+    <td class="center">31,544</td><td class="center">2026-10</td>
+    <td>客户端 Markdown 文档站，渲染效果好；但模型是「一个站点一套 index.html + 侧边栏」，<strong>不支持多根目录按需发布</strong>，也无认证。想看任意 workspace 得为每个 workspace 起一个站点并同步文件，与「随时查看」冲突。</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/squidfunk/mkdocs-material">squidfunk/mkdocs-material</a></td>
+    <td class="center">27,540</td><td class="center">2026-10</td>
+    <td>渲染一流的静态文档站，但<strong>要先构建</strong>：agent 刚写的文档要重新跑构建才能看，灵活性不满足使用场景。适合「发布态」文档，不适合「工作态」文档。</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/dullage/flatnotes">dullage/flatnotes</a></td>
+    <td class="center">3,237</td><td class="center">2026-08</td>
+    <td>自托管 Markdown 笔记，<strong>自带编辑器</strong>（违反 R2），单库模型，不支持浏览多个 workspace 目录。</td>
+  </tr>
+</table>
+
+<h3>方案 D：自建轻量只读网关 + 成熟渲染栈（选定）</h3>
+<p>自己写的部分只保留「必要的胶水」：显式发布授权、token 认证、路径沙箱、只读 API。渲染交给久经考验的开源轮子，直接内置（vendor）到仓库：</p>
+<table>
+  <tr><th>轮子</th><th class="center">Star</th><th class="center">最近提交</th><th>License</th><th>用途</th></tr>
+  <tr>
+    <td><a href="https://github.com/markedjs/marked">markedjs/marked</a> v18.0.14</td>
+    <td class="center">37,223</td><td class="center">2026-10</td><td>MIT</td>
+    <td>Markdown → HTML，浏览器端渲染，零依赖</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/cure53/DOMPurify">cure53/DOMPurify</a> 3.4.16</td>
+    <td class="center">17,439</td><td class="center">2026-10</td><td>Apache-2.0</td>
+    <td>HTML/XSS 清洗。OWASP XSS 防护备忘单明确推荐对用户自产 HTML 做 sanitization 并点名 DOMPurify</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/highlightjs/highlight.js">highlightjs/highlight.js</a> 11.12.0</td>
+    <td class="center">25,003</td><td class="center">2026-09</td><td>BSD-3-Clause</td>
+    <td>代码块语法高亮</td>
+  </tr>
+</table>
+<p>服务端选择 Python 3 标准库实现 HTTP 服务（<code>http.server</code>），不引入任何运行时第三方依赖——目标机器（跑 herdr 的 PC）已有 Python，安装零摩擦；HTTP 层需求简单（只读 GET + 静态资源），标准库足够，也少一条供应链。</p>
+
+<div class="callout ok">
+<p><strong>选型结论：</strong>方案 D。选它是因为「按需发布的多根目录 + Bearer token + 只读 + 渲染」这个组合没有现成产品同时满足，只能自建网关；而真正有风险、有难度的部分——Markdown 解析、XSS 清洗、语法高亮——全部交给 star 数 1.7 万～3.7 万、仍在活跃维护的成熟库。</p>
+</div>
+
+<h2>四、基础设施侧的确认</h2>
+<ul>
+  <li><strong>Cloudflare Tunnel 一隧多站</strong>：本地管理的 tunnel 通过配置文件的 ingress 规则把不同 hostname 路由到不同本地服务。新增 <code>docs.域名</code> → <code>127.0.0.1:8380</code> 不需要动 relay 的规则，现有控制通道零改动（来源：Cloudflare 文档「Published applications / configuration file」）。</li>
+  <li><strong>免费额度</strong>：发布应用本身不需要付费计划；Cloudflare Access（可选的第二层防护）才需要 Access 席位。</li>
+  <li><strong>HTTPS</strong>：隧道边缘天然 TLS，服务本体只需绑定 <code>127.0.0.1</code>。</li>
+</ul>
+
+<h2>五、证据清单</h2>
+<table>
+  <tr><th>结论</th><th>证据来源（2026-10-05 读取）</th></tr>
+  <tr><td>各项目 star / 最近提交 / 归档状态</td><td>GitHub REST API <code>api.github.com/repos/{owner}/{repo}</code> 逐仓库读取</td></tr>
+  <tr><td>一隧多服务、免付费发布应用</td><td><a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/routing-to-tunnel/">Cloudflare · Published applications</a></td></tr>
+  <tr><td>ingress 规则配置方式</td><td><a href="https://developers.cloudflare.com/tunnel/features/locally-managed-tunnels/configuration-file/">Cloudflare · Locally-managed tunnel configuration file</a></td></tr>
+  <tr><td>用户自产 HTML 需 sanitization、DOMPurify</td><td><a href="https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html">OWASP XSS Prevention Cheat Sheet</a></td></tr>
+  <tr><td>dufs / miniserve / docsify / flatnotes 能力</td><td>各仓库 README 与 CLI 帮助文本</td></tr>
+</table>
+
+<h2>六、已知取舍</h2>
+<ul>
+  <li><strong>不做全库搜索</strong>：手机端「查看」为主，搜索后续按需加（客户端过滤目录内文件名已覆盖基本场景）。</li>
+  <li><strong>不做多用户</strong>：单人使用，一个 token；吊销即全局吊销，模型简单反而安全。</li>
+  <li><strong>HTML 完整脚本模式受限</strong>：默认渲染是清洗后的安全模式；带脚本的交互式 HTML 走沙箱 iframe（详见方案设计），脚本能力受浏览器沙箱约束，这是为保护 token 必须付的代价。</li>
+  <li><strong>静态资源本地内置（vendor）而非 CDN</strong>：多占约 200 KB 体积，换来弱网/无 CDN 环境下手机端可用，且没有 CDN 侧的供应链风险。</li>
+</ul>
+
+</main>
+<footer>docgate · 调研报告 · 项目文档以 HTML 为主，README.md 等 GitHub 传统文档除外</footer>
+</body>
+</html>

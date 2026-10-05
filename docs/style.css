@@ -1,0 +1,172 @@
+/* docgate 文档站共享样式 */
+:root {
+  --bg: #fbfbfd;
+  --fg: #1f2430;
+  --muted: #5b6472;
+  --accent: #2456c4;
+  --accent-soft: #e8eefb;
+  --border: #d9dee7;
+  --card: #ffffff;
+  --code-bg: #f0f2f6;
+  --warn-bg: #fff6e5;
+  --warn-border: #e8b34b;
+  --ok-bg: #e9f7ee;
+  --ok-border: #43a866;
+  --mono: "SFMono-Regular", "JetBrains Mono", Consolas, "Noto Sans Mono CJK SC", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171d;
+    --fg: #e6e9ef;
+    --muted: #9aa4b2;
+    --accent: #7ba4f4;
+    --accent-soft: #22304a;
+    --border: #2c323c;
+    --card: #1b1f27;
+    --code-bg: #232833;
+    --warn-bg: #322a17;
+    --warn-border: #8a6a25;
+    --ok-bg: #17281d;
+    --ok-border: #2f6b43;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.75 -apple-system, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+}
+main {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 18px 80px;
+}
+header.site {
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+header.site .inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 14px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  align-items: baseline;
+}
+header.site .brand { font-weight: 700; font-size: 17px; text-decoration: none; color: var(--fg); }
+header.site nav { display: flex; gap: 14px; flex-wrap: wrap; }
+header.site nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14.5px;
+  padding: 2px 0;
+}
+header.site nav a.active { color: var(--accent); font-weight: 600; border-bottom: 2px solid var(--accent); }
+header.site nav a:hover { color: var(--accent); }
+
+h1 { font-size: 26px; line-height: 1.35; margin: 26px 0 8px; }
+h2 {
+  font-size: 20.5px;
+  margin: 40px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+h3 { font-size: 17px; margin: 26px 0 8px; }
+p, ul, ol { margin: 10px 0; }
+li { margin: 5px 0; }
+a { color: var(--accent); }
+.lead { color: var(--muted); font-size: 15.5px; margin-top: 0; }
+.meta { color: var(--muted); font-size: 13px; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 14px 0;
+  font-size: 14.5px;
+  display: block;
+  overflow-x: auto;
+}
+th, td {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: var(--accent-soft); white-space: nowrap; }
+td.center, th.center { text-align: center; }
+
+code, pre {
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+code {
+  background: var(--code-bg);
+  padding: 1.5px 5px;
+  border-radius: 5px;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 13px 15px;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+pre code { background: none; padding: 0; }
+
+.callout {
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 8px 8px 0;
+  padding: 10px 14px;
+  margin: 14px 0;
+}
+.callout.warn { border-left-color: var(--warn-border); background: var(--warn-bg); }
+.callout.ok { border-left-color: var(--ok-border); background: var(--ok-bg); }
+.callout p:first-child { margin-top: 0; }
+.callout p:last-child { margin-bottom: 0; }
+
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 1px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge.yes { color: var(--ok-border); border-color: var(--ok-border); }
+.badge.no { color: #c0453b; border-color: #c0453b; }
+
+.arch {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.9;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+  white-space: pre;
+}
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin: 14px 0; }
+.card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 10px;
+  padding: 13px 15px;
+}
+.card h4 { margin: 0 0 6px; font-size: 15px; }
+.card p { margin: 4px 0; font-size: 14px; color: var(--muted); }
+
+footer {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+}

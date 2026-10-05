@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docgate · 方案设计</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site">
+  <div class="inner">
+    <a class="brand" href="index.html">docgate 文档</a>
+    <nav>
+      <a href="index.html">调研报告</a>
+      <a class="active" href="design.html">方案设计</a>
+      <a href="deploy.html">部署与使用</a>
+      <a href="security-review.html">安全评审</a>
+    </nav>
+  </div>
+</header>
+<main>
+
+<h1>方案设计</h1>
+<p class="lead">docgate 是一个独立的只读文档网关：把 PC 上<strong>显式发布</strong>的 workspace 目录，通过 Cloudflare Tunnel 上的独立子域名，以 token 认证的方式提供给手机端渲染阅读。本页是实现蓝图与安全模型。</p>
+
+<h2>一、目标与非目标</h2>
+<div class="cards">
+  <div class="card">
+    <h4>目标</h4>
+    <p>① 显式发布才可见（R1）② 纯只读（R2）③ Markdown / HTML 渲染（R3）④ token 认证（R4）⑤ 与 herdr-remote 控制通道完全隔离（R5）</p>
+  </div>
+  <div class="card">
+    <h4>非目标</h4>
+    <p>不做编辑、不做多用户/权限体系、不做全库搜索、不替代 herdr-remote 的 agent 控制功能、不托管到云端</p>
+  </div>
+</div>
+
+<h2>二、总体架构</h2>
+<div class="arch">手机浏览器 / PWA
+   │  HTTPS
+   ▼
+docs.你的域名 ──── Cloudflare Tunnel（与 relay 同一隧道，独立 ingress 规则）
+   │
+   ▼
+docgate 服务（127.0.0.1:8380，Python 标准库）
+   ├─ 认证层   Bearer token（哈希存储 + 常数时间比较 + 失败限速）
+   ├─ 授权层   发布清单（publish / unpublish 显式管理）
+   ├─ 文件层   路径沙箱（realpath 包含性检查、符号链接逃逸拒绝、隐藏文件跳过、扩展名白名单）
+   └─ 渲染层   浏览器端：marked + DOMPurify + highlight.js（本地 vendor）
+   │
+   ▼
+已发布的 workspace 目录（默认只绑定 127.0.0.1，不直连公网）
+
+herdr-remote relay :8375 ── 控制通道，完全不动</div>
+<p>关键决策：<strong>文档服务与 agent 控制通道物理隔离</strong>——不同的端口、不同的子域名、不同的 token。文档服务解析的是不可信文件内容；把它放在攻击面最小的独立进程里，解析层就算出问题，攻击者也触及不到向 agent 发指令的 WebSocket 接口。这就是「不影响我使用」的实现方式：现有 relay 零改动。</p>
+
+<h2>三、核心概念</h2>
+<table>
+  <tr><th style="width:140px">概念</th><th>定义</th></tr>
+  <tr><td>发布根（root）</td><td>一条 <code>名字 → 绝对目录</code> 的映射，由 <code>docgate publish</code> 显式添加、<code>docgate unpublish</code> 撤销，持久化在配置文件里。默认没有任何发布根——刚装完的 docgate 看不到任何文件。</td></tr>
+  <tr><td>token</td><td>256 位随机值，服务端只保存它的 SHA-256 哈希（配置文件 0600）。手机端输入一次保存在浏览器本地。支持 <code>docgate token rotate</code> 一键吊销旧 token。</td></tr>
+  <tr><td>路径沙箱</td><td>所有文件访问先把相对路径解析为 realpath，再验证其仍位于某个发布根之内；任何逃逸（<code>../</code>、绝对路径、指向外部的符号链接）都拒绝。</td></tr>
+  <tr><td>一次性 ticket</td><td>HTML 完整模式专用：换取一个 30 秒有效、单次使用的 ticket，再带 ticket 打开沙箱页面。避免把长期 token 放进 URL。</td></tr>
+</table>
+
+<h2>四、命令行接口</h2>
+<pre><code>$ python3 -m docgate publish ~/work/proj-a --as proj-a   # 显式发布
+$ python3 -m docgate list                                  # 查看发布清单
+$ python3 -m docgate unpublish proj-a                      # 撤销
+$ python3 -m docgate token rotate                          # 生成/轮换 token（明文只显示一次）
+$ python3 -m docgate serve --host 127.0.0.1 --port 8380    # 启动服务</code></pre>
+<p>配置文件 <code>~/.config/docgate/config.json</code>（权限 0600），审计日志 <code>~/.local/state/docgate/audit.log</code>（JSONL）。</p>
+
+<h2>五、HTTP API（/api/v1）</h2>
+<p>除 health 外全部要求 <code>Authorization: Bearer &lt;token&gt;</code>；唯一例外是 <code>rawhtml</code>——它是浏览器 iframe 导航，无法携带请求头，改以一次性 ticket 作为该端点的凭证（ticket 也只发给持 token 的调用方）。只接受 GET/HEAD，其余方法返回 405（明确拒绝 WebDAV 类动词）。</p>
+<table>
+  <tr><th>端点</th><th>返回</th><th>说明</th></tr>
+  <tr><td><code>GET /api/v1/health</code></td><td>JSON</td><td>免认证探活，只回 <code>{ok, service, version}</code></td></tr>
+  <tr><td><code>GET /api/v1/roots</code></td><td>JSON</td><td>已发布根列表（名字、真实路径、条目数）</td></tr>
+  <tr><td><code>GET /api/v1/tree?root=&amp;path=</code></td><td>JSON</td><td>目录列表：名称、类型（dir/text/image/other）、大小、修改时间。隐藏项与不支持的类型不会出现在列表里</td></tr>
+  <tr><td><code>GET /api/v1/meta?root=&amp;path=</code></td><td>JSON</td><td>单文件元信息（类型、大小、修改时间）</td></tr>
+  <tr><td><code>GET /api/v1/raw?root=&amp;path=</code></td><td>原始字节</td><td>文件内容。文本统一以 <code>text/plain</code> 返回，图片按 <code>image/*</code>，PDF 按 <code>application/pdf</code>。<strong>用户内容永远不会以 text/html 返回</strong>——渲染只发生在前端清洗之后</td></tr>
+  <tr><td><code>GET /api/v1/html-ticket?root=&amp;path=</code></td><td>JSON</td><td>为 HTML 完整模式签发一次性 ticket（30 秒过期）</td></tr>
+  <tr><td><code>GET /api/v1/rawhtml?root=&amp;path=&amp;ticket=</code></td><td>text/html</td><td>完整模式唯一返回 HTML 的通道，凭证为一次性 ticket（不是 Bearer）。响应头强制 <code>Content-Security-Policy: sandbox …</code>（不含 allow-same-origin），文档获得不透明源：脚本可运行，但拿不到 viewer 的 token、localStorage 或任何同源数据</td></tr>
+</table>
+<p>所有响应都带 <code>X-Content-Type-Options: nosniff</code>；API 响应额外带 <code>Cache-Control: no-store</code>。不设置任何 CORS 头，其他站点的页面无法读取响应。</p>
+
+<h2>六、渲染管线</h2>
+<table>
+  <tr><th>类型</th><th>管线</th></tr>
+  <tr><td>Markdown（.md/.markdown）</td><td>marked 解析 → DOMPurify 清洗 → 注入容器 → highlight.js 高亮代码块。站内相对链接改写为查看器路由，外链加 <code>rel="noopener noreferrer"</code>；相对图片经认证接口取回后用 blob URL 展示</td></tr>
+  <tr><td>HTML（.html/.htm）默认模式</td><td>DOMPurify 整文档清洗（保留样式与结构，剥离脚本与事件属性）后渲染；文档自带的站内相对样式表经认证接口取回后内联。覆盖绝大多数文档阅读场景</td></tr>
+  <tr><td>HTML 完整模式（按需切换）</td><td>签发 ticket → 沙箱 iframe 加载 <code>rawhtml</code>。文档脚本可运行（交互式图表等），但处于不透明源沙箱，无法触及 token 与页面数据</td></tr>
+  <tr><td>纯文本 / 代码</td><td>highlight.js 高亮展示（<code>text/plain</code> 原文永不执行）</td></tr>
+  <tr><td>图片 / PDF</td><td>blob URL 直接展示；SVG 按图片渲染（<code>&lt;img&gt;</code> 上下文不执行脚本）</td></tr>
+</table>
+
+<h2>七、安全模型（威胁 → 对策）</h2>
+<table>
+  <tr><th>威胁</th><th>对策</th></tr>
+  <tr><td>陌生人访问文档（R4）</td><td>Bearer token 必需；服务端存哈希、常数时间比较；认证失败按来源 IP 限速（15 分钟内 10 次失败即封禁一段时间）；token 可随时 rotate 吊销</td></tr>
+  <tr><td>借隧道读到未授权目录（R1）</td><td>默认零发布；发布清单持久化且可即时撤销；每次请求做 realpath 包含性检查；指向发布根之外的符号链接拒绝；隐藏文件/目录（<code>.git</code>、<code>.env</code>…）默认跳过；扩展名白名单之外的文件不提供</td></tr>
+  <tr><td>恶意文档脚本偷 token / 冒充页面</td><td>服务端对用户内容<strong>永不返回 text/html</strong>（渲染前一律 text/plain + nosniff）；前端 DOMPurify 清洗；完整模式走无 allow-same-origin 的 CSP sandbox iframe；viewer 自身配严格 CSP：<code>default-src 'none'; script-src 'self'; frame-src 'self' blob:; base-uri 'none'; form-action 'none'</code>（内容里的脚本、事件属性即使漏网也无法执行）</td></tr>
+  <tr><td>任何写入尝试（R2）</td><td>代码里不存在写入端点；方法白名单 GET/HEAD，WebDAV 动词一律 405；不读取请求体</td></tr>
+  <tr><td>token 泄漏进日志/URL</td><td>token 只走 Authorization 头；ticket 短寿命（30 秒）单次使用且绑定文件路径；审计日志只记事件与路径，永不记凭证</td></tr>
+  <tr><td>抵赖 / 事后追查</td><td>JSONL 审计日志记录认证失败、发布变更、文件访问（时间、来源 IP、根、路径）</td></tr>
+  <tr><td>资源消耗（大文件拖垮手机/服务）</td><td>渲染体积上限（默认 2 MB，超出时提示并允许强制渲染）；HTTP 线程设超时；拒绝超长 URL 与请求体</td></tr>
+  <tr><td>波及 agent 控制通道（R5）</td><td>独立进程、独立端口、独立子域名、独立 token；绑定 127.0.0.1 只经隧道暴露；herdr-remote relay 零改动</td></tr>
+</table>
+
+<div class="callout warn">
+<p><strong>残余风险：</strong>① 发布目录内非隐藏的敏感文件（比如 <code>notes.yaml</code> 里手写的密码）对持 token 者可见——发布前自行确认目录内容，或加 <code>--docs-only</code> 只放行文档类型；② 完整模式下文档脚本可运行，浏览器沙箱挡住了同源访问，但它仍可能发起网络请求（外联），不信任的 HTML 请用默认模式；③ token 一旦在手机上泄漏，等同于文档全集泄漏，发现后立即 <code>token rotate</code>。</p>
+</div>
+
+<h2>八、验收标准</h2>
+<table>
+  <tr><th>需求</th><th>验收方式</th></tr>
+  <tr><td>R1 明确授权</td><td>测试：未发布的目录在 tree/roots 不可见、文件接口 404；unpublish 后立即不可见</td></tr>
+  <tr><td>R2 只读</td><td>测试：POST/PUT/DELETE/MKCOL/PROPFIND 等全部 405；代码无写入端点</td></tr>
+  <tr><td>R3 渲染</td><td>测试 + 实测：md 渲染出标题/代码高亮，HTML 清洗后渲染，完整模式沙箱生效</td></tr>
+  <tr><td>R4 token</td><td>测试：无 token 401、错 token 401、连续失败触发 429；实测手机端输入 token 后可浏览</td></tr>
+  <tr><td>R5 安全不碍事</td><td>测试：响应头（nosniff/CSP）断言；herdr-remote 配置零改动（只新增 ingress 规则）</td></tr>
+</table>
+
+</main>
+<footer>docgate · 方案设计 · 配套页面：<a href="index.html">调研报告</a> · <a href="deploy.html">部署与使用</a></footer>
+</body>
+</html>
