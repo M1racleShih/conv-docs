@@ -26,3 +26,4 @@ Thumbs.db
 # ---- 本地私密状态（token、审计等绝不入库）----
 *.local.env
 secrets.env
+.dynamic-skills/lock.json
