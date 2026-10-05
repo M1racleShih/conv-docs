@@ -1,4 +1,4 @@
-# docgate
+# conv-doc
 
 只读文档网关：把 PC 上**显式发布**的 workspace 目录，通过 Cloudflare Tunnel 以 token 认证的方式送到手机端渲染阅读。Markdown / HTML 渲染，纯只读，与 [herdr-remote](https://github.com/dcolinmorgan/herdr-remote) 的 agent 控制通道完全隔离。
 
@@ -21,9 +21,9 @@
 ## 快速开始
 
 ```bash
-python3 -m docgate token rotate                    # 生成 token（明文只显示一次）
-python3 -m docgate publish ~/work/proj-a --as proj-a
-python3 -m docgate serve                           # 127.0.0.1:8380
+python3 -m conv_doc token rotate                    # 生成 token（明文只显示一次）
+python3 -m conv_doc publish ~/work/proj-a --as proj-a
+python3 -m conv_doc serve                           # 127.0.0.1:8380
 ```
 
 常驻运行：`bash scripts/install-service.sh`（systemd 用户服务 + cloudflared ingress 配置片段）。
@@ -48,8 +48,8 @@ TOKEN=<token> node scripts/browser-smoke.mjs # 无头 Chrome 端到端：登录�
 目录结构：
 
 ```
-docgate/          服务端（store 配置 / security 安全原语 / server HTTP）+ web/ 移动端查看器
-docgate/web/vendor/  渲染栈（marked 18.0.14 · DOMPurify 3.4.16 · highlight.js 11.12.0，含各自 LICENSE）
+conv_doc/          服务端（store 配置 / security 安全原语 / server HTTP）+ web/ 移动端查看器
+conv_doc/web/vendor/  渲染栈（marked 18.0.14 · DOMPurify 3.4.16 · highlight.js 11.12.0，含各自 LICENSE）
 tests/            标准库 unittest 测试
 scripts/          install-service.sh · fetch-vendor.sh · browser-smoke.mjs
 docs/             HTML 文档（调研 / 设计 / 部署）
@@ -57,7 +57,7 @@ docs/             HTML 文档（调研 / 设计 / 部署）
 
 ## 安全
 
-威胁模型与残余风险见 [方案设计](docs/design.html)，部署安全清单见 [部署手册](docs/deploy.html)。要点：用户内容永不以 `text/html` 返回（完整模式除外且强制 CSP sandbox 无 `allow-same-origin`）；token 只走 Authorization 头；审计日志 `~/.local/state/docgate/audit.log`。报告安全问题见 [SECURITY.md](SECURITY.md)。
+威胁模型与残余风险见 [方案设计](docs/design.html)，部署安全清单见 [部署手册](docs/deploy.html)。要点：用户内容永不以 `text/html` 返回（完整模式除外且强制 CSP sandbox 无 `allow-same-origin`）；token 只走 Authorization 头；审计日志 `~/.local/state/conv-doc/audit.log`。报告安全问题见 [SECURITY.md](SECURITY.md)。
 
 ## 第三方组件
 
@@ -67,7 +67,7 @@ docs/             HTML 文档（调研 / 设计 / 部署）
 | [DOMPurify](https://github.com/cure53/DOMPurify) | 3.4.16 | Apache-2.0 | HTML/XSS 清洗 |
 | [highlight.js](https://github.com/highlightjs/highlight.js) | 11.12.0 | BSD-3-Clause | 代码高亮 |
 
-各组件许可证原文在 `docgate/web/vendor/LICENSE.*`。
+各组件许可证原文在 `conv_doc/web/vendor/LICENSE.*`。
 
 ## License
 

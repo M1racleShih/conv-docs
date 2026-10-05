@@ -1,11 +1,11 @@
-/* docgate 移动端查看器 —— 零依赖 SPA。
+/* conv-doc 移动端查看器 —— 零依赖 SPA。
  * 渲染管线：marked → DOMPurify → 注入；HTML 完整模式走一次性 ticket + 沙箱 iframe。
  * CSP 保证即使清洗漏网，脚本也不会在本源执行。 */
 (function () {
   "use strict";
 
-  var TOKEN_KEY = "docgate.token";
-  var THEME_KEY = "docgate.theme";
+  var TOKEN_KEY = "conv-doc.token";
+  var THEME_KEY = "conv-doc.theme";
   var app = document.getElementById("app");
 
   // ---------- token ----------
@@ -182,7 +182,7 @@
       location.hash = "#/";
       route();
     });
-    app.appendChild(el("h1", { text: "docgate" }));
+    app.appendChild(el("h1", { text: "conv-doc" }));
     app.appendChild(el("p", { class: "muted", text: "workspace 文档只读查看。输入 PC 端生成的访问 token；它只保存在本机浏览器。" }));
     app.appendChild(err);
     app.appendChild(form);
@@ -197,7 +197,7 @@
     app.appendChild(el("p", { class: "muted small", text: "只显示已显式发布的目录。" }));
     var list = el("div", { class: "list" });
     if (!data.roots.length) {
-      list.appendChild(el("div", { class: "panel", text: "还没有发布任何目录。在 PC 上运行：python3 -m docgate publish <目录>" }));
+      list.appendChild(el("div", { class: "panel", text: "还没有发布任何目录。在 PC 上运行：python3 -m conv_doc publish <目录>" }));
     }
     data.roots.forEach(function (r) {
       var item = el("a", { class: "list-item", href: "#/b/" + encodeURIComponent(r.name) }, [

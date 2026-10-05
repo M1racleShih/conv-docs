@@ -1,10 +1,10 @@
-"""docgate 命令行入口。
+"""conv-doc 命令行入口。
 
-    python3 -m docgate publish <dir> [--as NAME] [--docs-only]
-    python3 -m docgate unpublish <name>
-    python3 -m docgate list
-    python3 -m docgate token rotate
-    python3 -m docgate serve [--host 127.0.0.1] [--port 8380]
+    python3 -m conv_doc publish <dir> [--as NAME] [--docs-only]
+    python3 -m conv_doc unpublish <name>
+    python3 -m conv_doc list
+    python3 -m conv_doc token rotate
+    python3 -m conv_doc serve [--host 127.0.0.1] [--port 8380]
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def cmd_token(args, store: ConfigStore) -> int:
 
 def cmd_serve(args, store: ConfigStore) -> int:
     if not store.has_token():
-        print("错误：还没有设置访问 token，先运行：python3 -m docgate token rotate", file=sys.stderr)
+        print("错误：还没有设置访问 token，先运行：python3 -m conv_doc token rotate", file=sys.stderr)
         return 1
     from .server import serve
 
@@ -74,10 +74,10 @@ def cmd_serve(args, store: ConfigStore) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="docgate",
+        prog="conv-doc",
         description="只读文档网关：把显式发布的 workspace 目录安全地送到手机端",
     )
-    parser.add_argument("--version", action="version", version=f"docgate {__version__}")
+    parser.add_argument("--version", action="version", version=f"conv-doc {__version__}")
     parser.add_argument("--config", default=None, help=f"配置文件路径（默认 {default_config_path()}）")
     sub = parser.add_subparsers(dest="command", required=True)
 

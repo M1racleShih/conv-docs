@@ -1,4 +1,4 @@
-"""docgate 只读 HTTP 服务。
+"""conv-doc 只读 HTTP 服务。
 
 只提供 GET/HEAD；除 /api/v1/health 外全部要求 Bearer token。
 用户内容永远不以 text/html 返回（HTML 完整模式除外，且强制 CSP sandbox）。
@@ -94,7 +94,7 @@ class AuditLog:
 
 
 class DocgateHandler(BaseHTTPRequestHandler):
-    server_version = "docgate/" + __version__
+    server_version = "conv_doc/" + __version__
     protocol_version = "HTTP/1.1"
     timeout = 30  # 慢速连接防占用线程
 
@@ -167,7 +167,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
 
     def _method_not_allowed(self):
         self.close_connection = True  # 请求体不消费，直接断开防粘包
-        self.send_error_json(405, "docgate 是只读服务，不接受写入类方法", extra={"Allow": "GET, HEAD"})
+        self.send_error_json(405, "conv-doc 是只读服务，不接受写入类方法", extra={"Allow": "GET, HEAD"})
 
     do_POST = do_PUT = do_PATCH = do_DELETE = _method_not_allowed
     do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
@@ -197,7 +197,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
                 self.send_error_json(500, "内部错误")
             except Exception:
                 pass
-            sys.stderr.write(f"[docgate] error: {exc!r}\n")
+            sys.stderr.write(f"[conv-doc] error: {exc!r}\n")
 
     # ---------- 静态资源（查看器自身） ----------
 
@@ -237,7 +237,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
 
     def _api(self, path: str, query: dict):
         if path == "/api/v1/health":
-            return self.send_json({"ok": True, "service": "docgate", "version": __version__})
+            return self.send_json({"ok": True, "service": "conv-doc", "version": __version__})
 
         # 完整模式的沙箱 iframe 是浏览器导航，无法携带 Authorization 头；
         # 一次性 ticket 即该端点的凭证（只能由已认证调用方换取）。
@@ -446,7 +446,7 @@ class DocgateServer(ThreadingHTTPServer):
 def serve(host: str, port: int, store: ConfigStore) -> None:
     server = DocgateServer((host, port), store)
     bound_host, bound_port = server.server_address[:2]
-    print(f"docgate {__version__} 监听 http://{bound_host}:{bound_port}")
+    print(f"conv-doc {__version__} 监听 http://{bound_host}:{bound_port}")
     print(f"发布根 {len(store.publishes())} 个；配置 {store.path}")
     if host not in ("127.0.0.1", "localhost", "::1"):
         print("警告：服务没有绑定回环地址，请确认防火墙与隧道配置", file=sys.stderr)

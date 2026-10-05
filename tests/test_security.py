@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from docgate.security import (  # noqa: E402
+from conv_doc.security import (  # noqa: E402
     AuthRateLimiter,
     PathViolation,
     classify,

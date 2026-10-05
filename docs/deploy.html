@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>docgate · 部署与使用</title>
+<title>conv-doc · 部署与使用</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="site">
   <div class="inner">
-    <a class="brand" href="index.html">docgate 文档</a>
+    <a class="brand" href="index.html">conv-doc 文档</a>
     <nav>
       <a href="index.html">调研报告</a>
       <a href="design.html">方案设计</a>
@@ -31,27 +31,27 @@
 </ul>
 
 <h2>二、安装与首次启动</h2>
-<pre><code>git clone &lt;本仓库&gt; docgate &amp;&amp; cd docgate
+<pre><code>git clone &lt;本仓库&gt; conv-doc &amp;&amp; cd conv-doc
 
 # 1. 生成访问 token（明文只显示一次，保存到手机）
-python3 -m docgate token rotate
+python3 -m conv_doc token rotate
 
 # 2. 显式发布一个 workspace 目录（默认什么都不暴露）
-python3 -m docgate publish ~/work/proj-a --as proj-a
+python3 -m conv_doc publish ~/work/proj-a --as proj-a
 
 # 3. 启动（默认只监听 127.0.0.1:8380）
-python3 -m docgate serve</code></pre>
+python3 -m conv_doc serve</code></pre>
 <p>本机浏览器打开 <code>http://127.0.0.1:8380</code> 验证：输入 token 后应能看到已发布的目录。</p>
 
 <h3>常驻运行（systemd 用户服务）</h3>
 <pre><code>bash scripts/install-service.sh</code></pre>
-<p>脚本会写入 <code>~/.config/systemd/user/docgate.service</code>、设置开机自启并启动服务；没有 token 时会先生成一个并打印。管理命令：</p>
-<pre><code>systemctl --user status docgate
-systemctl --user restart docgate
-journalctl --user -u docgate -f</code></pre>
+<p>脚本会写入 <code>~/.config/systemd/user/conv-doc.service</code>、设置开机自启并启动服务；没有 token 时会先生成一个并打印。管理命令：</p>
+<pre><code>systemctl --user status conv-doc
+systemctl --user restart conv-doc
+journalctl --user -u conv-doc -f</code></pre>
 
 <h2>三、接入 Cloudflare Tunnel</h2>
-<p>docgate 与 herdr-remote 的 relay 共用隧道但互不干扰：只是在 ingress 规则里<strong>新增一条</strong> hostname 映射，relay 的规则与 token 一个字都不用改。</p>
+<p>conv-doc 与 herdr-remote 的 relay 共用隧道但互不干扰：只是在 ingress 规则里<strong>新增一条</strong> hostname 映射，relay 的规则与 token 一个字都不用改。</p>
 <pre><code># ~/.cloudflared/config.yml（示意，保持你已有的规则）
 ingress:
   - hostname: relay.你的域名        # 已有的 herdr-remote 规则，原样保留
@@ -76,13 +76,13 @@ systemctl --user restart cloudflared   # 或你现有的 cloudflared 运行方�
 <h2>五、日常运维</h2>
 <table>
   <tr><th>想做什么</th><th>命令 / 操作</th></tr>
-  <tr><td>新增一个 workspace</td><td><code>python3 -m docgate publish &lt;目录&gt; --as &lt;名字&gt;</code>，即时生效，无需重启</td></tr>
-  <tr><td>撤销某个 workspace</td><td><code>python3 -m docgate unpublish &lt;名字&gt;</code>，即时生效</td></tr>
-  <tr><td>查看发布清单</td><td><code>python3 -m docgate list</code></td></tr>
-  <tr><td>token 泄漏 / 定期轮换</td><td><code>python3 -m docgate token rotate</code>（旧 token 立即失效，手机重新输入）</td></tr>
+  <tr><td>新增一个 workspace</td><td><code>python3 -m conv_doc publish &lt;目录&gt; --as &lt;名字&gt;</code>，即时生效，无需重启</td></tr>
+  <tr><td>撤销某个 workspace</td><td><code>python3 -m conv_doc unpublish &lt;名字&gt;</code>，即时生效</td></tr>
+  <tr><td>查看发布清单</td><td><code>python3 -m conv_doc list</code></td></tr>
+  <tr><td>token 泄漏 / 定期轮换</td><td><code>python3 -m conv_doc token rotate</code>（旧 token 立即失效，手机重新输入）</td></tr>
   <tr><td>只放行文档与图片</td><td>发布时加 <code>--docs-only</code>（代码、数据文件一律不出现在列表）</td></tr>
-  <tr><td>查看访问审计</td><td><code>tail -f ~/.local/state/docgate/audit.log</code>（JSONL：认证失败、发布变更、文件访问）</td></tr>
-  <tr><td>配置文件</td><td><code>~/.config/docgate/config.json</code>（0600，只存 token 哈希，不存明文）</td></tr>
+  <tr><td>查看访问审计</td><td><code>tail -f ~/.local/state/conv-doc/audit.log</code>（JSONL：认证失败、发布变更、文件访问）</td></tr>
+  <tr><td>配置文件</td><td><code>~/.config/conv-doc/config.json</code>（0600，只存 token 哈希，不存明文）</td></tr>
 </table>
 
 <h2>六、安全清单（部署时过一遍）</h2>
@@ -98,13 +98,13 @@ systemctl --user restart cloudflared   # 或你现有的 cloudflared 运行方�
 <table>
   <tr><th>现象</th><th>排查</th></tr>
   <tr><td>手机 401</td><td>token 是否输入完整；是否已 rotate 过；连续失败 10 次会封禁 15 分钟（换网络或等待）</td></tr>
-  <tr><td>手机 404（目录/文件）</td><td><code>docgate list</code> 确认已发布；文件是否隐藏/不在扩展名白名单；路径拼写</td></tr>
-  <tr><td>隧道 502/530</td><td><code>systemctl --user status docgate</code>；<code>cloudflared tunnel ingress validate</code>；ingress 里 docs 规则是否在 catch-all 之前</td></tr>
+  <tr><td>手机 404（目录/文件）</td><td><code>conv-doc list</code> 确认已发布；文件是否隐藏/不在扩展名白名单；路径拼写</td></tr>
+  <tr><td>隧道 502/530</td><td><code>systemctl --user status conv-doc</code>；<code>cloudflared tunnel ingress validate</code>；ingress 里 docs 规则是否在 catch-all 之前</td></tr>
   <tr><td>HTML 完整模式空白</td><td>ticket 只有 30 秒且一次性，重新点「完整模式」；文档脚本被沙箱约束属预期</td></tr>
   <tr><td>页面样式丢失</td><td>文档的 <code>&lt;link&gt;</code> 外站样式被 CSP 拦截属预期；站内相对样式会自动内联</td></tr>
 </table>
 
 </main>
-<footer>docgate · 部署与使用 · 配套页面：<a href="index.html">调研报告</a> · <a href="design.html">方案设计</a></footer>
+<footer>conv-doc · 部署与使用 · 配套页面：<a href="index.html">调研报告</a> · <a href="design.html">方案设计</a></footer>
 </body>
 </html>

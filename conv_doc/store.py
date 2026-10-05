@@ -1,6 +1,6 @@
 """配置存储：发布清单 + token 哈希。
 
-配置文件（默认 ~/.config/docgate/config.json）以 0600 权限原子写入。
+配置文件（默认 ~/.config/conv_doc/config.json）以 0600 权限原子写入。
 服务端只保存 token 的 SHA-256 哈希，明文只在 rotate 时打印一次。
 """
 
@@ -24,15 +24,15 @@ class StoreError(Exception):
 
 
 def default_config_path() -> str:
-    return os.environ.get("DOCGATE_CONFIG") or os.path.join(
-        os.path.expanduser("~"), ".config", "docgate", "config.json"
+    return os.environ.get("CONV_DOC_CONFIG") or os.path.join(
+        os.path.expanduser("~"), ".config", "conv-doc", "config.json"
     )
 
 
 def default_state_dir() -> str:
-    return os.environ.get("DOCGATE_STATE_DIR") or os.path.join(
+    return os.environ.get("CONV_DOC_STATE_DIR") or os.path.join(
         os.environ.get("XDG_STATE_HOME", os.path.join(os.path.expanduser("~"), ".local", "state")),
-        "docgate",
+        "conv-doc",
     )
 
 

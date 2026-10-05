@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 浏览器端到端冒烟测试（需本机 Chrome + 已运行的 docgate）。
+ * 浏览器端到端冒烟测试（需本机 Chrome + 已运行的 conv-doc）。
  *
  *   TOKEN=... BASE=http://127.0.0.1:8380 node scripts/browser-smoke.mjs
  *
@@ -27,7 +27,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const chrome = spawn(CHROME, [
   "--headless", "--no-first-run", "--disable-gpu",
   `--remote-debugging-port=${PORT}`,
-  `--user-data-dir=/tmp/docgate-smoke-profile-${process.pid}`,
+  `--user-data-dir=/tmp/conv-doc-smoke-profile-${process.pid}`,
   "about:blank",
 ], { stdio: "ignore" });
 process.on("exit", () => { try { chrome.kill(); } catch {} });
@@ -96,7 +96,7 @@ function check(name, ok, detail = "") {
 
 // 1. 登录：写入 token 并进入工作区列表
 await navigate("#/login");
-await evalJs(`localStorage.setItem("docgate.token", ${JSON.stringify(TOKEN)}); location.hash = "#/"; "ok"`);
+await evalJs(`localStorage.setItem("conv-doc.token", ${JSON.stringify(TOKEN)}); location.hash = "#/"; "ok"`);
 await waitFor(async () => (await evalJs(`document.querySelectorAll(".list-item").length`)) > 0, "工作区列表");
 const rootsText = await evalJs(`document.getElementById("app").innerText`);
 check("登录后看到已发布工作区", rootsText.includes(ROOT), ROOT);

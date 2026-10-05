@@ -2,7 +2,7 @@
 
 ## 模型摘要
 
-docgate 是单用户、token 认证、纯只读的文档网关。核心保证：
+conv-doc 是单用户、token 认证、纯只读的文档网关。核心保证：
 
 - 只有显式 `publish` 的目录可被读取；隐藏文件、扩展名白名单之外的文件、逃逸符号链接一律拒绝。
 - 服务端对用户内容永不返回 `text/html`；HTML 完整模式经一次性 ticket 进入 CSP sandbox（无 `allow-same-origin`）的不透明源。
@@ -21,7 +21,7 @@ docgate 是单用户、token 认证、纯只读的文档网关。核心保证：
 
 ## 运营建议
 
-- token 泄漏或设备丢失时立即 `python3 -m docgate token rotate`。
+- token 泄漏或设备丢失时立即 `python3 -m conv_doc token rotate`。
 - 服务仅绑定 `127.0.0.1` 并经 Cloudflare Tunnel 暴露；不要直接暴露公网端口。
 - 发布目录前自行确认内容；不确定时使用 `--docs-only`。
 - 可在 Cloudflare Zero Trust 上为 `docs.*` 增加 Access 策略作为第二层防护。

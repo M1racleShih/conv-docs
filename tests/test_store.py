@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from docgate.store import ConfigStore, StoreError  # noqa: E402
+from conv_doc.store import ConfigStore, StoreError  # noqa: E402
 
 
 class StoreTests(unittest.TestCase):
