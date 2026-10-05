@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="conv-docs mascot: a cute owl reading a document">
+  <!-- Original artwork for conv-docs (MIT). A friendly owl with a document. -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F6B25C"/>
+      <stop offset="1" stop-color="#E8913A"/>
+    </linearGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EAF0FB"/>
+    </linearGradient>
+  </defs>
+
+  <!-- soft ground shadow -->
+  <ellipse cx="256" cy="474" rx="152" ry="16" fill="#1F2430" opacity="0.10"/>
+
+  <!-- feet -->
+  <path d="M200 452c-16 0-28 8-28 18 0 6 6 10 16 10h44c10 0 16-4 16-10 0-10-12-18-28-18z" fill="#E9862F"/>
+  <path d="M312 452c-16 0-28 8-28 18 0 6 6 10 16 10h44c10 0 16-4 16-10 0-10-12-18-28-18z" fill="#E9862F"/>
+
+  <!-- body -->
+  <path d="M256 66c-102 0-172 78-172 182 0 116 78 200 172 200s172-84 172-200c0-104-70-182-172-182z" fill="url(#body)"/>
+
+  <!-- belly -->
+  <path d="M256 176c-72 0-118 58-118 132 0 78 50 130 118 130s118-52 118-130c0-74-46-132-118-132z" fill="#FFEDD2"/>
+
+  <!-- wings -->
+  <path d="M96 262c-12 6-18 22-14 42 6 30 24 62 46 82 12 10 26 6 30-8 4-12-2-28-12-46-16-30-32-52-50-70z" fill="#D97B2B"/>
+  <path d="M416 262c12 6 18 22 14 42-6 30-24 62-46 82-12 10-26 6-30-8-4-12 2-28 12-46 16-30 32-52 50-70z" fill="#D97B2B"/>
+
+  <!-- ear tufts -->
+  <path d="M124 128c-6-26 2-52 16-60 12-6 26 2 32 18z" fill="#D97B2B"/>
+  <path d="M388 128c6-26-2-52-16-60-12-6-26 2-32 18z" fill="#D97B2B"/>
+
+  <!-- eye whites -->
+  <circle cx="192" cy="212" r="66" fill="#FFFFFF"/>
+  <circle cx="320" cy="212" r="66" fill="#FFFFFF"/>
+  <!-- pupils -->
+  <circle cx="200" cy="216" r="34" fill="#2B3444"/>
+  <circle cx="312" cy="216" r="34" fill="#2B3444"/>
+  <!-- highlights -->
+  <circle cx="212" cy="202" r="12" fill="#FFFFFF"/>
+  <circle cx="324" cy="202" r="12" fill="#FFFFFF"/>
+  <circle cx="192" cy="230" r="6" fill="#FFFFFF" opacity="0.7"/>
+  <circle cx="304" cy="230" r="6" fill="#FFFFFF" opacity="0.7"/>
+
+  <!-- brows (friendly) -->
+  <path d="M138 150c16-16 40-24 62-22" stroke="#C96F26" stroke-width="12" stroke-linecap="round" fill="none"/>
+  <path d="M374 150c-16-16-40-24-62-22" stroke="#C96F26" stroke-width="12" stroke-linecap="round" fill="none"/>
+
+  <!-- beak -->
+  <path d="M256 240c14 0 26 10 26 22 0 16-12 30-26 30s-26-14-26-30c0-12 12-22 26-22z" fill="#F4C232"/>
+  <path d="M230 268c6 8 15 13 26 13s20-5 26-13c-4 14-14 22-26 22s-22-8-26-22z" fill="#E0A81E"/>
+
+  <!-- document held by wing -->
+  <g transform="rotate(-8 256 380)">
+    <rect x="176" y="322" width="160" height="128" rx="14" fill="url(#page)" stroke="#C9D4E8" stroke-width="4"/>
+    <rect x="200" y="352" width="112" height="12" rx="6" fill="#2456C4"/>
+    <rect x="200" y="382" width="112" height="10" rx="5" fill="#9DB4DE"/>
+    <rect x="200" y="408" width="76" height="10" rx="5" fill="#9DB4DE"/>
+    <!-- heart on the page: docs you love -->
+    <path d="M316 398c-9-9-22-1-22 9 0 7 9 15 22 23 13-8 22-16 22-23 0-10-13-18-22-9z" fill="#E8615C"/>
+  </g>
+  <!-- wing tip over the page -->
+  <path d="M158 372c-10 8-12 26-4 42 10 22 30 44 52 58 12 8 26 2 30-12 4-12-2-26-14-42-16-22-42-38-64-46z" fill="#E08333"/>
+
+  <!-- cheeks -->
+  <ellipse cx="140" cy="272" r="22" fill="#F7A98E" opacity="0.65"/>
+  <ellipse cx="372" cy="272" r="22" fill="#F7A98E" opacity="0.65"/>
+</svg>
