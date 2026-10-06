@@ -1,4 +1,4 @@
-"""配置存储：发布清单 + token 哈希。
+"""Config store: publish list + token hash.
 
 配置文件（默认 ~/.config/conv_docs/config.json）以 0600 权限原子写入。
 服务端只保存 token 的 SHA-256 哈希，明文只在 rotate 时打印一次。
@@ -87,9 +87,9 @@ class ConfigStore:
             with open(self.path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
         except (OSError, json.JSONDecodeError) as exc:
-            raise StoreError(f"无法读取配置文件 {self.path}: {exc}") from exc
+            raise StoreError(f"cannot read config file {self.path}: {exc}") from exc
         if not isinstance(data, dict):
-            raise StoreError(f"配置文件格式错误: {self.path}")
+            raise StoreError(f"invalid config file format: {self.path}")
         data.setdefault("publishes", {})
         data.setdefault("settings", {"skip_hidden": True, "max_render_bytes": 2 * 1024 * 1024})
         data.setdefault("token_sha256", "")
@@ -122,7 +122,7 @@ class ConfigStore:
 
     def set_token(self, token: str) -> None:
         if not token or len(token) < 16:
-            raise StoreError("token 太短，至少 16 个字符")
+            raise StoreError("token too short — at least 16 characters")
         self.data["token_sha256"] = hash_token(token)
         self.save()
 
@@ -139,13 +139,13 @@ class ConfigStore:
     def publish(self, path: str, name: str | None = None, docs_only: bool = False) -> Publish:
         real = os.path.realpath(os.path.expanduser(path))
         if not os.path.isdir(real):
-            raise StoreError(f"目录不存在: {path}")
+            raise StoreError(f"directory does not exist: {path}")
         name = name or os.path.basename(real.rstrip(os.sep)) or "root"
         if not _NAME_RE.match(name):
-            raise StoreError(f"名字只允许字母、数字、点、下划线和连字符（1-64 位）: {name!r}")
+            raise StoreError(f"name may contain only letters, digits, dots, underscores and hyphens (1-64 chars): {name!r}")
         for existing in self.data["publishes"].values():
             if existing["path"] == real:
-                raise StoreError(f"该目录已以名字 {existing['name']!r} 发布")
+                raise StoreError(f"this directory is already published as {existing['name']!r}")
         pub = Publish(name=name, path=real, published_at=time.strftime("%Y-%m-%dT%H:%M:%S%z"), docs_only=docs_only)
         self.data["publishes"][name] = asdict(pub)
         self.save()

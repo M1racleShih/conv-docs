@@ -1,13 +1,33 @@
 [project]
 name = "conv-docs"
 version = "0.1.0"
-description = "conv-docs (Convenient Documents) — 只读文档网关：把显式发布的 workspace 目录安全地送到手机端渲染阅读"
+description = "conv-docs (Convenient Documents) — a read-only document gateway: serve explicitly published workspace docs securely to your phone"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
+authors = [{ name = "Han-Qing Shi", email = "hanqshih@gmail.com" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Documentation",
+  "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
 keywords = ["docs", "markdown", "readonly", "self-hosted", "cloudflare-tunnel"]
-# 运行时零第三方依赖：服务端只用 Python 标准库
+# Zero third-party runtime dependencies: the server uses only the Python standard library
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/M1racleShih/conv-docs"
+Repository = "https://github.com/M1racleShih/conv-docs"
+Issues = "https://github.com/M1racleShih/conv-docs/issues"
 
 [project.scripts]
 conv-docs = "conv_docs.__main__:main"

@@ -167,7 +167,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
 
     def _method_not_allowed(self):
         self.close_connection = True  # 请求体不消费，直接断开防粘包
-        self.send_error_json(405, "conv-docs 是只读服务，不接受写入类方法", extra={"Allow": "GET, HEAD"})
+        self.send_error_json(405, "conv-docs is read-only; write-style methods are not accepted", extra={"Allow": "GET, HEAD"})
 
     do_POST = do_PUT = do_PATCH = do_DELETE = _method_not_allowed
     do_OPTIONS = do_TRACE = do_CONNECT = _method_not_allowed
@@ -182,7 +182,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
             self.store.maybe_reload()  # CLI 的 publish/unpublish/token 即时生效
             raw_url = self.path
             if len(raw_url) > MAX_URL:
-                return self.send_error_json(414, "URL 过长")
+                return self.send_error_json(414, "URL too long")
             parts = urlsplit(raw_url)
             path = unquote(parts.path)
             query = {k: v[0] for k, v in parse_qs(parts.query, keep_blank_values=True).items()}
@@ -194,7 +194,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
             pass
         except Exception as exc:  # 不向客户端泄漏栈信息
             try:
-                self.send_error_json(500, "内部错误")
+                self.send_error_json(500, "internal error")
             except Exception:
                 pass
             sys.stderr.write(f"[conv-docs] error: {exc!r}\n")
@@ -255,8 +255,8 @@ class DocgateHandler(BaseHTTPRequestHandler):
         if not authed:
             extra = {"WWW-Authenticate": "Bearer"}
             if reason == "locked":
-                return self.send_error_json(429, "认证失败次数过多，请稍后再试", extra=extra)
-            return self.send_error_json(401, "需要有效的访问 token", extra=extra)
+                return self.send_error_json(429, "too many failed authentication attempts; try again later", extra=extra)
+            return self.send_error_json(401, "a valid access token is required", extra=extra)
 
         if path == "/api/v1/roots":
             return self._api_roots()
@@ -298,17 +298,17 @@ class DocgateHandler(BaseHTTPRequestHandler):
         rel = (query.get("path") or "").strip()
         pub = self.store.get(root_name)
         if pub is None:
-            raise PathViolation("未发布的根目录")
+            raise PathViolation("root is not published")
         try:
             full = resolve_within(pub.path, rel, skip_hidden=self.store.skip_hidden)
         except PathViolation:
             raise
         if need_file and not os.path.isfile(full):
-            raise PathViolation("文件不存在")
+            raise PathViolation("file not found")
         if kind is not None:
             file_kind = classify(full)
             if file_kind != kind:
-                raise PathViolation("文件类型不匹配")
+                raise PathViolation("file type mismatch")
         return pub, full
 
     def _api_roots(self):
@@ -334,7 +334,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
         except PathViolation as exc:
             return self.send_error_json(404, str(exc))
         if not os.path.isdir(full):
-            return self.send_error_json(404, "不是目录")
+            return self.send_error_json(404, "not a directory")
         items = []
         try:
             with os.scandir(full) as it:
@@ -361,7 +361,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
                         "mtime": int(stat.st_mtime),
                     })
         except PermissionError:
-            return self.send_error_json(403, "无权读取该目录")
+            return self.send_error_json(403, "permission denied")
         items.sort(key=lambda x: (0 if x["kind"] == "dir" else 1, x["name"].lower()))
         return self.send_json({"root": pub.name, "path": query.get("path", ""), "entries": items})
 
@@ -372,7 +372,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
             return self.send_error_json(404, str(exc))
         kind = classify(full)
         if not self._kind_allowed(pub, kind):
-            return self.send_error_json(404, "不支持的文件类型")
+            return self.send_error_json(404, "unsupported file type")
         stat = os.stat(full)
         return self.send_json({
             "root": pub.name, "path": query.get("path", ""), "name": os.path.basename(full),
@@ -387,7 +387,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
             return self.send_error_json(404, str(exc))
         kind = classify(full)
         if not self._kind_allowed(pub, kind):
-            return self.send_error_json(404, "不支持的文件类型")
+            return self.send_error_json(404, "unsupported file type")
         size = os.path.getsize(full)
         self.audit.write("view", ip=self.client_key(), root=pub.name,
                          path=query.get("path", ""), kind=kind)
@@ -417,11 +417,11 @@ class DocgateHandler(BaseHTTPRequestHandler):
         rel = (query.get("path") or "").strip()
         key = self.client_key()
         if self.limiter.retry_after(key) > 0:
-            return self.send_error_json(429, "认证失败次数过多，请稍后再试")
+            return self.send_error_json(429, "too many failed authentication attempts; try again later")
         if not ticket or not self.server.tickets.consume(ticket, root, rel):
             self.limiter.record_failure(key)  # 防 ticket 爆破
             self.audit.write("ticket_reject", ip=key, root=root, path=rel)
-            return self.send_error_json(403, "ticket 无效或已过期")
+            return self.send_error_json(403, "ticket invalid or expired")
         try:
             pub, full = self._resolve(query, need_file=True, kind="html")
         except PathViolation as exc:
@@ -453,10 +453,10 @@ class DocgateServer(ThreadingHTTPServer):
 def serve(host: str, port: int, store: ConfigStore) -> None:
     server = DocgateServer((host, port), store)
     bound_host, bound_port = server.server_address[:2]
-    print(f"conv-docs {__version__} 监听 http://{bound_host}:{bound_port}")
-    print(f"发布根 {len(store.publishes())} 个；配置 {store.path}")
+    print(f"conv-docs {__version__} listening on http://{bound_host}:{bound_port}")
+    print(f"{len(store.publishes())} published root(s); config {store.path}")
     if host not in ("127.0.0.1", "localhost", "::1"):
-        print("警告：服务没有绑定回环地址，请确认防火墙与隧道配置", file=sys.stderr)
+        print("warning: not bound to loopback — check your firewall and tunnel setup", file=sys.stderr)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
