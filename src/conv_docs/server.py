@@ -21,6 +21,8 @@ from .security import (
     AuthRateLimiter,
     PathViolation,
     classify,
+    compile_excludes,
+    excluded,
     raw_content_type,
     resolve_within,
 )
@@ -290,6 +292,9 @@ class DocgateHandler(BaseHTTPRequestHandler):
             return False
         if pub.docs_only and kind not in ("markdown", "html", "image", "pdf"):
             return False
+        # 代码过滤：code 类（源代码+数据配置）默认不可见，--allow-code 放行
+        if kind == "code" and not self.store.code_allowed(pub):
+            return False
         return True
 
     def _resolve(self, query: dict, *, need_file: bool = False, kind: str | None = None):
@@ -299,6 +304,16 @@ class DocgateHandler(BaseHTTPRequestHandler):
         pub = self.store.get(root_name)
         if pub is None:
             raise PathViolation("root is not published")
+        # 单文件预览根：rel 一律归一化为空（根自身即文件）
+        if os.path.isfile(pub.path):
+            rel = ""
+        # 过期/烧尽的预览当作不存在（maybe_reload 已惰性清理，这里兑底）
+        entry = self.store.data["publishes"].get(root_name, {})
+        if self.store.is_entry_expired(entry):
+            raise PathViolation("preview expired")
+        # exclude 强制：被排除的路径一律拒绝，不泄漏存在性
+        if pub.excludes and excluded(rel, compile_excludes(pub.excludes)):
+            raise PathViolation("path excluded")
         try:
             full = resolve_within(pub.path, rel, skip_hidden=self.store.skip_hidden)
         except PathViolation:
@@ -314,17 +329,29 @@ class DocgateHandler(BaseHTTPRequestHandler):
     def _api_roots(self):
         roots = []
         for pub in self.store.publishes():
+            if self.store.is_entry_expired(self.store.data["publishes"].get(pub.name, {})):
+                continue  # 双保险：过期预览不出现在列表里
+            is_file = os.path.isfile(pub.path)
             try:
-                entries = len([e for e in os.scandir(pub.path)
-                               if not (self.store.skip_hidden and e.name.startswith("."))])
+                entries = -1 if is_file else len([
+                    e for e in os.scandir(pub.path)
+                    if not (self.store.skip_hidden and e.name.startswith("."))
+                ])
             except OSError:
                 entries = 0
+            remaining = self.store.preview_remaining(pub)
             roots.append({
                 "name": pub.name,
                 "path": pub.path,
                 "docs_only": pub.docs_only,
                 "entries": entries,
                 "published_at": pub.published_at,
+                "project": pub.project,
+                "is_file": is_file,
+                "preview": pub.is_preview,
+                "expires_in": remaining,
+                "once": pub.once,
+                "burned": bool(pub.burned_at),
             })
         return self.send_json({"roots": roots})
 
@@ -333,21 +360,38 @@ class DocgateHandler(BaseHTTPRequestHandler):
             pub, full = self._resolve(query)
         except PathViolation as exc:
             return self.send_error_json(404, str(exc))
+        if os.path.isfile(pub.path) and (query.get("path") or "").strip("/") == "":
+            # 单文件预览根：直接返回该文件自身，前端点击即渲染
+            kind = classify(full)
+            if not self._kind_allowed(pub, kind):
+                return self.send_error_json(404, "unsupported file type")
+            stat = os.stat(full)
+            return self.send_json({"root": pub.name, "path": "", "entries": [{
+                "name": os.path.basename(full), "path": "",
+                "kind": kind, "size": stat.st_size, "mtime": int(stat.st_mtime),
+            }]})
         if not os.path.isdir(full):
             return self.send_error_json(404, "not a directory")
+        compiled = compile_excludes(pub.excludes) if pub.excludes else []
         items = []
         try:
             with os.scandir(full) as it:
                 for entry in it:
-                    if self.store.skip_hidden and entry.name.startswith("."):
+                    rel_seg = entry.name
+                    child_rel = os.path.join(query.get("path", "").strip("/"), rel_seg).lstrip("/").replace(os.sep, "/")
+                    if self.store.skip_hidden and rel_seg.startswith("."):
                         continue
                     try:
                         stat = entry.stat(follow_symlinks=False)
                     except OSError:
                         continue
                     if entry.is_dir(follow_symlinks=False):
+                        if compiled and excluded(child_rel, compiled, is_dir=True):
+                            continue
                         kind = "dir"
                     elif entry.is_file(follow_symlinks=False):
+                        if compiled and excluded(child_rel, compiled):
+                            continue
                         kind = classify(entry.name)
                         if not self._kind_allowed(pub, kind):
                             continue  # 不支持/未放行的类型不出现在列表里
@@ -355,7 +399,7 @@ class DocgateHandler(BaseHTTPRequestHandler):
                         continue  # 符号链接等一律不列出
                     items.append({
                         "name": entry.name,
-                        "path": os.path.join(query.get("path", "").strip("/"), entry.name).lstrip("/"),
+                        "path": child_rel,
                         "kind": kind,
                         "size": stat.st_size,
                         "mtime": int(stat.st_mtime),
@@ -388,6 +432,8 @@ class DocgateHandler(BaseHTTPRequestHandler):
         kind = classify(full)
         if not self._kind_allowed(pub, kind):
             return self.send_error_json(404, "unsupported file type")
+        if pub.once:
+            self.store.mark_burned(pub.name)  # 阅后即焚：首次内容访问起算宽限窗
         size = os.path.getsize(full)
         self.audit.write("view", ip=self.client_key(), root=pub.name,
                          path=query.get("path", ""), kind=kind)
@@ -426,6 +472,8 @@ class DocgateHandler(BaseHTTPRequestHandler):
             pub, full = self._resolve(query, need_file=True, kind="html")
         except PathViolation as exc:
             return self.send_error_json(404, str(exc))
+        if pub.once:
+            self.store.mark_burned(pub.name)  # 阅后即焚：完整模式同样点燃
         with open(full, "rb") as fh:
             body = fh.read()
         self.audit.write("view_rawhtml", ip=self.client_key(), root=pub.name, path=rel)

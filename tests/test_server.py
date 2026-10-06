@@ -283,5 +283,172 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(status, 200, name)
 
 
+class FeatureTests(unittest.TestCase):
+    """代码过滤 / exclude 强制 / 临时预览 / 项目分组 / roots 新字段。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.config_path = os.path.join(cls.tmp.name, "config.json")
+        cls.store = ConfigStore(cls.config_path)
+        cls.store.set_token(TOKEN)
+
+        # 主根：文档 + 代码 + 敏感文件
+        cls.main_dir = os.path.join(cls.tmp.name, "main")
+        os.makedirs(os.path.join(cls.main_dir, "secrets"))
+        os.makedirs(os.path.join(cls.main_dir, "nested"))
+        files = {
+            "readme.md": "# main\n",
+            "app.py": "print(1)\n",
+            "cfg.toml": "k=1\n",
+            "plain.txt": "plain\n",
+            "secrets/key.pem": "PRIVATE",
+            "nested/prod.env": "SECRET=1\n",
+            "nested/ok.md": "ok\n",
+        }
+        for rel, content in files.items():
+            full = os.path.join(cls.main_dir, rel)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w") as fh:
+                fh.write(content)
+        cls.store.publish(cls.main_dir, name="main",
+                          project="demo", excludes=["*.env", "secrets/**"])
+
+        # allow-code 根
+        cls.code_dir = os.path.join(cls.tmp.name, "codews")
+        os.makedirs(cls.code_dir)
+        with open(os.path.join(cls.code_dir, "a.py"), "w") as fh:
+            fh.write("x=1\n")
+        cls.store.publish(cls.code_dir, name="codews", allow_code=True)
+
+        # 单文件预览 + 目录预览 + once 预览
+        cls.note = os.path.join(cls.tmp.name, "note.md")
+        with open(cls.note, "w") as fh:
+            fh.write("note body\n")
+        cls.store.preview(cls.note, ttl=3600, project="demo")
+        cls.burn_file = os.path.join(cls.tmp.name, "burn.md")
+        with open(cls.burn_file, "w") as fh:
+            fh.write("# burn after reading\n")
+        cls.store.preview(cls.burn_file, name="burn", ttl=3600, once=True)
+        # 供过期测试用的独立预览（避免污染其他用例）
+        cls.ephemeral = os.path.join(cls.tmp.name, "ephemeral.md")
+        with open(cls.ephemeral, "w") as fh:
+            fh.write("gone soon\n")
+        cls.store.preview(cls.ephemeral, name="ephemeral", ttl=3600)
+
+        from conv_docs.server import AuditLog
+        cls.server = DocgateServer(("127.0.0.1", 0), cls.store,
+                                   audit=AuditLog(os.path.join(cls.tmp.name, "audit.log")))
+        cls.port = cls.server.server_address[1]
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        cls.tmp.cleanup()
+
+    def authed(self, path):
+        return self.request(path, headers={"Authorization": "Bearer " + TOKEN})
+
+    def request(self, path, method="GET", headers=None):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request(method, path, headers=headers or {})
+        res = conn.getresponse()
+        data = res.read()
+        conn.close()
+        return res.status, dict(res.getheaders()), data
+
+    def json_of(self, data):
+        return json.loads(data.decode("utf-8"))
+
+    # ---------- 代码过滤 ----------
+
+    def test_code_hidden_by_default(self):
+        status, _, data = self.authed("/api/v1/tree?root=main&path=")
+        names = {e["name"] for e in self.json_of(data)["entries"]}
+        self.assertEqual(names, {"readme.md", "plain.txt", "nested"})  # app.py/cfg.toml 不见
+        status, _, _ = self.authed("/api/v1/raw?root=main&path=app.py")
+        self.assertEqual(status, 404)  # 直访也被拒
+
+    def test_code_visible_with_allow_code(self):
+        status, _, data = self.authed("/api/v1/tree?root=codews&path=")
+        names = {e["name"] for e in self.json_of(data)["entries"]}
+        self.assertEqual(names, {"a.py"})
+        status, _, _ = self.authed("/api/v1/raw?root=codews&path=a.py")
+        self.assertEqual(status, 200)
+
+    def test_global_filter_code_off_allows_everything(self):
+        self.store.data["settings"]["filter_code"] = False
+        try:
+            status, _, _ = self.authed("/api/v1/raw?root=main&path=app.py")
+            self.assertEqual(status, 200)
+        finally:
+            self.store.data["settings"]["filter_code"] = True
+
+    # ---------- exclude 强制 ----------
+
+    def test_exclude_prunes_tree_and_direct_access(self):
+        status, _, data = self.authed("/api/v1/tree?root=main&path=")
+        names = {e["name"] for e in self.json_of(data)["entries"]}
+        self.assertNotIn("secrets", names)  # secrets/** 剪树
+        status, _, data = self.authed("/api/v1/tree?root=main&path=nested")
+        names = {e["name"] for e in self.json_of(data)["entries"]}
+        self.assertEqual(names, {"ok.md"})  # *.env 挡住 nested/prod.env
+        for path in ["secrets/key.pem", "nested/prod.env"]:
+            status, _, _ = self.authed(f"/api/v1/raw?root=main&path={path}")
+            self.assertEqual(status, 404, path)  # 直访 404，不泄漏存在性
+
+    # ---------- roots 新字段 / 项目分组 ----------
+
+    def test_roots_new_fields(self):
+        status, _, data = self.authed("/api/v1/roots")
+        roots = {r["name"]: r for r in self.json_of(data)["roots"]}
+        self.assertEqual(roots["main"]["project"], "demo")
+        self.assertFalse(roots["main"]["preview"])
+        self.assertFalse(roots["main"]["is_file"])
+        note = roots["note.md"]
+        self.assertTrue(note["preview"] and note["is_file"])
+        self.assertTrue(note["expires_in"] and 0 < note["expires_in"] <= 3600)
+        self.assertFalse(note["once"])
+        burn = roots["burn"]
+        self.assertTrue(burn["once"] and burn["preview"])
+        # burned 状态由 test_once_preview_burns_on_first_content_access 单独验证
+
+    # ---------- 临时预览 ----------
+
+    def test_single_file_preview_tree_and_raw(self):
+        status, _, data = self.authed("/api/v1/tree?root=note.md&path=")
+        entries = self.json_of(data)["entries"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["kind"], "markdown")
+        status, _, data = self.authed("/api/v1/raw?root=note.md&path=")
+        self.assertEqual(status, 200)
+        self.assertIn(b"note body", data)
+
+    def test_once_preview_burns_on_first_content_access(self):
+        status, _, _ = self.authed("/api/v1/raw?root=burn&path=")
+        self.assertEqual(status, 200)
+        status, _, data = self.authed("/api/v1/roots")
+        burn = next(r for r in self.json_of(data)["roots"] if r["name"] == "burn")
+        self.assertTrue(burn["burned"])
+        self.assertTrue(0 < burn["expires_in"] <= ConfigStore.BURN_GRACE)  # 宽限窗剩余
+
+    def test_expired_preview_404_and_purged(self):
+        # 把磁盘上 ephemeral 的过期时间改为过去，服务端重载后应消失
+        with open(self.config_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["publishes"]["ephemeral"]["expires_at"] = time.time() - 1
+        with open(self.config_path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        os.utime(self.config_path)
+        status, _, _ = self.authed("/api/v1/raw?root=ephemeral&path=")
+        self.assertEqual(status, 404)
+        status, _, data = self.authed("/api/v1/roots")
+        names = {r["name"] for r in self.json_of(data)["roots"]}
+        self.assertNotIn("ephemeral", names)
+
+
 if __name__ == "__main__":
     unittest.main()

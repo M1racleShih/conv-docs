@@ -26,10 +26,15 @@ conv-docs 把 PC 上**显式发布**的 workspace 目录，通过 [Cloudflare Tu
 ## 特性
 
 - **显式授权** —— 默认零暴露；按目录 `publish` / `unpublish`，即时生效
+- **临时预览** —— `preview` 支持单文件或目录，默认 24h 过期；`--once` 阅后即焚（首次阅读后 10 分钟宽限窗）；同路径再次 preview 会替换旧条目并重置计时
+- **代码过滤** —— 源代码与结构化数据/配置（`.py`、`.json`、`.yaml` 等）默认不可见；`--allow-code` 按条目显式放行
+- **exclude 排除** —— `--exclude '*.env' --exclude 'secrets/**'`：服务端全链路强制（列表与直访均 404）
+- **项目分组** —— `--project NAME` 在网页端按项目折叠展示；单 token 模型不变
 - **纯只读** —— 只接受 GET/HEAD；WebDAV 类写入动词一律 405
 - **token 认证** —— Bearer token，服务端只存 SHA-256 哈希（配置 0600），一键轮换，按来源的失败限速
 - **Markdown / HTML 渲染** —— marked + DOMPurify + highlight.js（内置），交互式 HTML 另有脚本沙箱「完整模式」
 - **路径沙箱** —— realpath 包含性检查、符号链接逃逸拒绝、隐藏文件跳过、扩展名白名单
+- **Agent skill** —— `skills/conv-docs/SKILL.md` 让编码 agent 安全地把报告送到手机（preview 优先、敏感排除、token 纪律）
 - **零第三方运行时依赖** —— Python 3.10+ 标准库；查看器为无依赖 TypeScript
 - **双语界面** —— 默认英文，一键切换中文
 
@@ -50,17 +55,24 @@ uv run conv-docs serve                 # 127.0.0.1:8380
 
 | 命令 | 作用 |
 |------|------|
-| `publish <dir> [--as NAME] [--docs-only]` | 显式发布目录（`--docs-only` 只放行文档与图片） |
-| `unpublish <name>` | 撤销发布 |
-| `list` | 查看发布清单 |
+| `publish <dir> [--as NAME] [--docs-only] [--project P] [--exclude GLOB…] [--allow-code]` | 显式发布目录（`--docs-only` 只放行文档与图片） |
+| `preview <file\|dir> [--as NAME] [--ttl 2h] [--once] [同 publish 的参数]` | 临时预览，到期自动消失（默认 24h；`--once` 首次阅读 10 分钟后烧毁） |
+| `unpublish <name>` | 撤销发布或预览 |
+| `list` | 查看发布与预览清单（剩余时间、项目、排除规则） |
 | `token rotate` | 生成新 token 并使旧的失效（新 token 自动保存到 `~/.config/conv-docs/token.txt`） |
 | `serve [--host H] [--port P]` | 启动只读服务（默认 127.0.0.1:8380） |
+
+说明：
+
+- **代码过滤**：代码与数据/配置文件默认不可见（全局 `settings.filter_code`，条目级 `--allow-code` 覆盖）；纯文本文档与数据表（`txt/log/rst/csv/tsv…`）仍可见。伴生 `.css` 的 HTML 需 `--allow-code` 才能渲染样式。
+- **exclude 语义**（类 .gitignore 简化版）：不含 `/` 的模式匹配任意层文件名（`*.env`）；含 `/` 则相对发布根（`secrets/**`、`build/*`）。被排除路径服务端强制——列表隐藏、直访 404。
+- **预览**：同路径再次 preview 替换旧条目并重置计时；过期/烧尽条目自动清理。
 
 ## 开发与验证
 
 ```bash
-uv run pytest                               # 49 项单测：认证、只读、路径沙箱、ticket、响应头
-TOKEN=<token> node scripts/browser-smoke.mjs # 无头 Chrome 端到端：登录→浏览→渲染→沙箱（17 项断言）
+uv run pytest                               # 77 项单测：认证、只读、路径沙箱、ticket、响应头、代码过滤、exclude、预览
+TOKEN=<token> node scripts/browser-smoke.mjs # 无头 Chrome 端到端：登录→浏览→渲染→沙箱（18 项断言；夹具根需 --allow-code 发布）
 npm install && npm run build                # 重建 TypeScript 查看器（web-src/app.ts → src/conv_docs/web/app.js）
 ```
 
@@ -70,6 +82,7 @@ npm install && npm run build                # 重建 TypeScript 查看器（web-
 src/conv_docs/          Python 包：服务端（store / security / http）+ 编译产物 web 查看器
 src/conv_docs/web/      查看器产物（app.js 已提交；vendor 库含各自许可证）
 web-src/app.ts          查看器源码（strict TypeScript）
+skills/conv-docs/       agent skill 源文件（`dskills install skills/conv-docs` 导入技能池）
 tests/                  测试（unittest 风格，pytest / unittest 均可跑）
 scripts/                install-service.sh · fetch-vendor.sh · browser-smoke.mjs
 docs/en/, docs/zh/      HTML 文档（双语）

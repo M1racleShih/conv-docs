@@ -27,6 +27,12 @@ const I18N = {
         workspacesSub: "Only explicitly published directories appear here.",
         nonePublished: "Nothing published yet. On your PC run: uv run conv-docs publish <dir>",
         docsOnly: "docs-only",
+        allowCode: "code",
+        ungrouped: "Ungrouped",
+        previewBadge: "temporary",
+        onceBadge: "single view",
+        burning: "burning",
+        leftWord: "left",
         emptyDir: "Empty directory",
         backToWorkspaces: "Back to workspaces",
         modified: "Modified",
@@ -57,6 +63,12 @@ const I18N = {
         workspacesSub: "只显示已显式发布的目录。",
         nonePublished: "还没有发布任何目录。在 PC 上运行：uv run conv-docs publish <目录>",
         docsOnly: "仅文档",
+        allowCode: "含代码",
+        ungrouped: "未分组",
+        previewBadge: "临时",
+        onceBadge: "单次",
+        burning: "烧毁中",
+        leftWord: "剩余",
         emptyDir: "空目录",
         backToWorkspaces: "返回工作区列表",
         modified: "修改于",
@@ -291,27 +303,78 @@ function renderLogin(message) {
     app.appendChild(err);
     app.appendChild(form);
 }
+function fmtDuration(seconds) {
+    if (seconds >= 3600) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return h + "h" + String(m).padStart(2, "0") + "m";
+    }
+    if (seconds >= 60) {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return m + "m" + String(s).padStart(2, "0") + "s";
+    }
+    return seconds + "s";
+}
+function rootBadges(r) {
+    const parts = [];
+    if (r.preview)
+        parts.push("⏳ " + t("previewBadge"));
+    if (r.once)
+        parts.push("🔥 " + t("onceBadge"));
+    if (r.expires_in !== null && r.expires_in !== undefined) {
+        const left = fmtDuration(r.expires_in);
+        parts.push(currentLang() === "zh" ? t("leftWord") + " " + left : left + " " + t("leftWord"));
+    }
+    if (r.once && r.burned)
+        parts.push("🔥 " + t("burning"));
+    if (r.docs_only)
+        parts.push(t("docsOnly"));
+    return parts.join(" · ");
+}
 async function renderRoots() {
     const data = await apiJson("/api/v1/roots");
     app.innerHTML = "";
     app.appendChild(el("h1", { text: t("workspaces") }));
     app.appendChild(el("p", { class: "muted small", text: t("workspacesSub") }));
+    // 按项目分组（未分组归尾）
+    const groups = new Map();
+    for (const r of data.roots) {
+        const key = r.project || "";
+        if (!groups.has(key))
+            groups.set(key, []);
+        groups.get(key).push(r);
+    }
+    const names = [...groups.keys()].sort((a, b) => a.localeCompare(b));
+    if (names.includes("")) {
+        names.splice(names.indexOf(""), 1);
+        names.push("");
+    }
     const list = el("div", { class: "list" });
     if (!data.roots.length) {
         list.appendChild(el("div", { class: "panel", text: t("nonePublished") }));
     }
-    for (const r of data.roots) {
-        list.appendChild(el("a", { class: "list-item", href: "#/b/" + encodeURIComponent(r.name) }, [
-            el("div", { class: "glyph", text: "📁" }),
-            el("div", { class: "body" }, [
-                el("div", { class: "name", text: r.name }),
-                el("div", {
-                    class: "sub",
-                    text: r.path + (r.docs_only ? " · " + t("docsOnly") : ""),
-                }),
-            ]),
-            el("div", { class: "chev", text: "›" }),
-        ]));
+    for (const name of names) {
+        if (names.length > 1 || (names.length === 1 && name !== "")) {
+            list.appendChild(el("div", { class: "group-title", text: name || t("ungrouped") }));
+        }
+        for (const r of groups.get(name)) {
+            // 单文件预览根：直接进入渲染视图（rel 为空）
+            const href = r.is_file ? "#/v/" + encodeURIComponent(r.name) : "#/b/" + encodeURIComponent(r.name);
+            const glyph = r.is_file ? (r.preview ? "⏳" : "📄") : "📁";
+            const subParts = [r.path];
+            const badges = rootBadges(r);
+            if (badges)
+                subParts.push(badges);
+            list.appendChild(el("a", { class: "list-item", href }, [
+                el("div", { class: "glyph", text: glyph }),
+                el("div", { class: "body" }, [
+                    el("div", { class: "name", text: r.name }),
+                    el("div", { class: "sub", text: subParts.join(" · ") }),
+                ]),
+                el("div", { class: "chev", text: "›" }),
+            ]));
+        }
     }
     app.appendChild(list);
 }
@@ -336,7 +399,7 @@ function breadcrumb(root, rel) {
     return wrap;
 }
 const KIND_GLYPH = {
-    dir: "📁", markdown: "📝", html: "🌐", text: "📄", image: "🖼", pdf: "📕",
+    dir: "📁", markdown: "📝", html: "🌐", text: "📄", code: "💻", image: "🖼", pdf: "📕",
 };
 async function renderTree(root, rel) {
     const data = await apiJson("/api/v1/tree?root=" + encodeURIComponent(root) + "&path=" + encodeURIComponent(rel));

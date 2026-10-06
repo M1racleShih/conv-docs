@@ -4,6 +4,10 @@
  *
  *   TOKEN=... BASE=http://127.0.0.1:8380 node scripts/browser-smoke.mjs
  *
+ * 夹具要求：ROOT（默认 ai-fundamentals）需以 --allow-code 发布
+ * （HTML 样式表 style.css 属 code 类，需放行才能验证样式内联），
+ * 且目录中应有一个 code 文件（code/sample.py）用于验证默认代码过滤。
+ *
  * 通过 DevTools 协议驱动无头 Chrome：登录 → 浏览发布目录 →
  * Markdown 渲染 → HTML 安全渲染（脚本/事件被剥离）→ 完整模式沙箱断言。
  */
@@ -16,6 +20,7 @@ const CHROME = process.env.CHROME || "google-chrome";
 const ROOT = process.env.ROOT || "ai-fundamentals";
 const MD_FILE = process.env.MD_FILE || "README.md";
 const HTML_FILE = process.env.HTML_FILE || "chapters/01-fundamentals.html";
+const CODE_FILE = process.env.CODE_FILE || "code/sample.py";
 const PORT = 9333;
 
 if (!TOKEN) {
@@ -108,6 +113,18 @@ check("目录列表显示 README.md", treeText.includes("README.md"));
 check("目录列表显示 chapters", treeText.includes("chapters"));
 check(".git 不出现在目录列表", !treeText.includes(".git"));
 check("媒体文件不出现在列表", !treeText.includes(".mp4"));
+
+// 2b. 代码文件（ROOT 以 --allow-code 发布）：可见且能以高亮文本渲染
+if (treeText.includes(CODE_FILE.split("/")[0]) || treeText.includes(CODE_FILE.split("/").pop())) {
+  await navigate(`#/v/${ROOT}/${CODE_FILE}`);
+  const codeOk = await waitFor(async () => {
+    const n = await evalJs(`document.querySelectorAll(".doc-body pre code").length`);
+    return n > 0 ? n : null;
+  }, "代码文件渲染", 8000).catch(() => 0);
+  check("代码文件以高亮文本渲染（allow-code）", codeOk > 0, `${codeOk} 块`);
+} else {
+  check("代码文件以高亮文本渲染（allow-code）", false, `列表未见 ${CODE_FILE}（夹具缺失？）`);
+}
 
 // 3. Markdown 渲染
 await navigate(`#/v/${ROOT}/${MD_FILE}`);
