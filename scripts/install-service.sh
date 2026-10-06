@@ -78,7 +78,7 @@ cat <<EOF
   cloudflared tunnel ingress validate
   systemctl --user restart cloudflared   # 或你现有的 cloudflared 服务
 
-herdr-remote relay 的规则与 token 无需任何改动。
+已有的 ingress 规则与 token 无需任何改动。
 
 手机端打开 https://$HOSTNAME ，输入 token。
 

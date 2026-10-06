@@ -29,7 +29,7 @@
   <li>Python 3.10+ (the server has zero third-party runtime dependencies)</li>
   <li><a href="https://docs.astral.sh/uv/">uv</a> (recommended): project environment and dependency locking; without uv, plain <code>python3 -m conv_docs</code> works too</li>
   <li>Node.js (optional, only to rebuild the TypeScript viewer; the compiled <code>app.js</code> is committed)</li>
-  <li><code>cloudflared</code> (the Cloudflare Tunnel you already use for herdr-remote is fine)</li>
+  <li><code>cloudflared</code> (an existing Cloudflare Tunnel works fine — conv-docs just adds one hostname to it)</li>
   <li>systemd (optional, for running as a service)</li>
 </ul>
 
@@ -57,10 +57,10 @@ systemctl --user restart conv-docs
 journalctl --user -u conv-docs -f</code></pre>
 
 <h2>3. Join your Cloudflare Tunnel</h2>
-<p>conv-docs shares the tunnel with herdr-remote without interfering: you add <strong>one</strong> hostname mapping to the ingress rules; the relay's rules and token stay exactly as they are.</p>
+<p>conv-docs shares the tunnel with your existing services without interfering: you add <strong>one</strong> hostname mapping to the ingress rules; the existing rules and tokens stay exactly as they are.</p>
 <pre><code># ~/.cloudflared/config.yml (sketch — keep your existing rules)
 ingress:
-  - hostname: relay.yourdomain.example   # existing herdr-remote rule, unchanged
+  - hostname: relay.yourdomain.example   # existing rule, unchanged
     service: http://127.0.0.1:8375
   - hostname: docs.yourdomain.example    # new: the docs gateway
     service: http://127.0.0.1:8380

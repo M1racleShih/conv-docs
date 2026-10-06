@@ -12,7 +12,7 @@
 
 ---
 
-conv-docs serves **explicitly published** workspace directories from your PC, through a dedicated hostname on your [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/), to a mobile reader with token auth. Markdown and HTML render beautifully; strictly read-only; fully isolated from the [herdr-remote](https://github.com/dcolinmorgan/herdr-remote) agent control plane.
+conv-docs serves **explicitly published** workspace directories from your PC, through a dedicated hostname on your [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/), to a mobile reader with token auth. Markdown and HTML render beautifully; strictly read-only; fully standalone — useful with any workflow that produces documents, and isolated from everything else running on your machine.
 
 📘 Documentation (bilingual):
 

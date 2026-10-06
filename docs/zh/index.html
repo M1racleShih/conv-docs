@@ -22,17 +22,17 @@
 <main>
 
 <h1>调研报告：手机端灵活查看 workspace 文档</h1>
-<p class="lead">herdr 工作流缺少的一环：在不扩大 PC 暴露面的前提下，随时在手机上只读查看某个 workspace 的 Markdown 与 HTML 文档。本页记录需求、调研过程、候选方案对比和最终选型。</p>
+<p class="lead">文档驱动的工作流缺少的一环：在不扩大 PC 暴露面的前提下，随时在手机上只读查看某个 workspace 的 Markdown 与 HTML 文档。本页记录需求、调研过程、候选方案对比和最终选型。</p>
 <p class="meta">调研日期：2026-10-05 · 数据来源：GitHub API、Cloudflare 官方文档、OWASP Cheat Sheet（文末列证据）</p>
 
 <h2>一、需求清单</h2>
 <table>
   <tr><th style="width:130px">编号</th><th>需求</th><th>说明</th></tr>
   <tr><td>R1 明确授权</td><td>只有显式授权的目录才能在手机上看到</td><td>防止隧道变成「整个 PC 文件系统可读」的后门</td></tr>
-  <tr><td>R2 只读</td><td>手机端不提供编辑能力</td><td>改文档继续走 agent（herdr），手机只消费</td></tr>
+  <tr><td>R2 只读</td><td>手机端不提供编辑能力</td><td>改文档继续在 PC 上（编辑器或 agent），手机只消费</td></tr>
   <tr><td>R3 渲染</td><td>支持 Markdown 和 HTML 渲染，至少 HTML</td><td>文档要「能看」，不是下载源码</td></tr>
   <tr><td>R4 认证</td><td>必须持 token 访问，不能匿名</td><td>公网 URL 不等于公开内容</td></tr>
-  <tr><td>R5 安全</td><td>在不影响现有使用的前提下尽可能安全</td><td>现有 herdr-remote 控制通道（Cloudflare + 域名 + relay）零改动</td></tr>
+  <tr><td>R5 安全</td><td>在不影响现有使用的前提下尽可能安全</td><td>PC 及其隧道上已有的服务（现有控制通道、relay 等）零改动</td></tr>
 </table>
 <p>使用场景的隐含约束：手机随时打开（无需先构建站点）、无需账号体系（单人使用）、网络环境可能访问公共 CDN 不稳定（静态资源应本地内置）。</p>
 
@@ -46,8 +46,8 @@
 
 <h2>三、候选方案对比</h2>
 
-<h3>方案 A：扩展现有 herdr-remote relay</h3>
-<p>在 relay 上加 <code>/docs</code> 只读接口和手机页面，复用现有隧道、token 和审计日志。部署最省事，但文档功能直接扩大了 agent 控制通道的攻击面——文档解析、路径处理的任何漏洞都能摸到发号施令的 WebSocket 接口。与 R5 的「不影响现有使用」相悖，放弃。</p>
+<h3>方案 A：扩展现有 relay 服务</h3>
+<p>如果隧道上已经跑着某个 relay（文件同步、远程控制、agent 指令通道之类），直接在它上面加 <code>/docs</code> 只读接口和手机页面，复用现有隧道、token 和审计日志。部署最省事，但文档功能直接扩大了那个服务的攻击面——文档解析、路径处理的任何漏洞都能摸到它对外暴露的接口。与 R5 的「不影响现有使用」相悖，放弃。</p>
 
 <h3>方案 B：现成文件服务器</h3>
 <table>
@@ -110,7 +110,7 @@
     <td>代码块语法高亮</td>
   </tr>
 </table>
-<p>服务端选择 Python 3 标准库实现 HTTP 服务（<code>http.server</code>），不引入任何运行时第三方依赖——目标机器（跑 herdr 的 PC）已有 Python，安装零摩擦；HTTP 层需求简单（只读 GET + 静态资源），标准库足够，也少一条供应链。</p>
+<p>服务端选择 Python 3 标准库实现 HTTP 服务（<code>http.server</code>），不引入任何运行时第三方依赖——目标机器（你的 PC）已有 Python，安装零摩擦；HTTP 层需求简单（只读 GET + 静态资源），标准库足够，也少一条供应链。</p>
 
 <div class="callout ok">
 <p><strong>选型结论：</strong>方案 D。选它是因为「按需发布的多根目录 + Bearer token + 只读 + 渲染」这个组合没有现成产品同时满足，只能自建网关；而真正有风险、有难度的部分——Markdown 解析、XSS 清洗、语法高亮——全部交给 star 数 1.7 万～3.7 万、仍在活跃维护的成熟库。</p>

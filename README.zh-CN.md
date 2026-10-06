@@ -12,7 +12,7 @@
 
 ---
 
-conv-docs 把 PC 上**显式发布**的 workspace 目录，通过 [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/) 的独立子域名，以 token 认证的方式送到手机端阅读器。Markdown 与 HTML 渲染，纯只读，与 [herdr-remote](https://github.com/dcolinmorgan/herdr-remote) 的 agent 控制通道完全隔离。
+conv-docs 把 PC 上**显式发布**的 workspace 目录，通过 [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/) 的独立子域名，以 token 认证的方式送到手机端阅读器。Markdown 与 HTML 渲染，纯只读，完全独立——任何产出文档的工作流都能用，与机器上运行的其他服务互不干扰。
 
 📘 项目文档（双语）：
 
