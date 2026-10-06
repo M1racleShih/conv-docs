@@ -28,11 +28,11 @@
 <div class="cards">
   <div class="card">
     <h4>目标</h4>
-    <p>① 显式发布才可见（R1）② 纯只读（R2）③ Markdown / HTML 渲染（R3）④ token 认证（R4）⑤ 与 herdr-remote 控制通道完全隔离（R5）</p>
+    <p>① 显式发布才可见（R1）② 纯只读（R2）③ Markdown / HTML 渲染（R3）④ token 认证（R4）⑤ 与机器上其他服务完全隔离（R5）</p>
   </div>
   <div class="card">
     <h4>非目标</h4>
-    <p>不做编辑、不做多用户/权限体系、不做全库搜索、不替代 herdr-remote 的 agent 控制功能、不托管到云端</p>
+    <p>不做编辑、不做多用户/权限体系、不做全库搜索、不做任何形式的远程控制/指令通道、不托管到云端</p>
   </div>
 </div>
 
@@ -52,8 +52,8 @@ conv-docs 服务（127.0.0.1:8380，Python 标准库）
    ▼
 已发布的 workspace 目录（默认只绑定 127.0.0.1，不直连公网）
 
-herdr-remote relay :8375 ── 控制通道，完全不动</div>
-<p>关键决策：<strong>文档服务与 agent 控制通道物理隔离</strong>——不同的端口、不同的子域名、不同的 token。文档服务解析的是不可信文件内容；把它放在攻击面最小的独立进程里，解析层就算出问题，攻击者也触及不到向 agent 发指令的 WebSocket 接口。这就是「不影响我使用」的实现方式：现有 relay 零改动。</p>
+机器上的其他服务（如你自己的 relay）── 完全不动</div>
+<p>关键决策：<strong>文档服务与机器上的其他服务物理隔离</strong>——不同的端口、不同的子域名、不同的 token。文档服务解析的是不可信文件内容；把它放在攻击面最小的独立进程里，解析层就算出问题，攻击者也触及不到机器上的其他服务。这就是「不影响现有使用」的实现方式：已有服务零改动。</p>
 
 <h2>三、核心概念</h2>
 <table>
@@ -106,7 +106,7 @@ $ uv run conv-docs serve --host 127.0.0.1 --port 8380    # 启动服务</code></
   <tr><td>token 泄漏进日志/URL</td><td>token 只走 Authorization 头；ticket 短寿命（30 秒）单次使用且绑定文件路径；审计日志只记事件与路径，永不记凭证</td></tr>
   <tr><td>抵赖 / 事后追查</td><td>JSONL 审计日志记录认证失败、发布变更、文件访问（时间、来源 IP、根、路径）</td></tr>
   <tr><td>资源消耗（大文件拖垮手机/服务）</td><td>渲染体积上限（默认 2 MB，超出时提示并允许强制渲染）；HTTP 线程设超时；拒绝超长 URL 与请求体</td></tr>
-  <tr><td>波及 agent 控制通道（R5）</td><td>独立进程、独立端口、独立子域名、独立 token；绑定 127.0.0.1 只经隧道暴露；herdr-remote relay 零改动</td></tr>
+  <tr><td>波及机器上的其他服务（R5）</td><td>独立进程、独立端口、独立子域名、独立 token；绑定 127.0.0.1 只经隧道暴露；已有服务零改动</td></tr>
 </table>
 
 <div class="callout warn">
@@ -120,7 +120,7 @@ $ uv run conv-docs serve --host 127.0.0.1 --port 8380    # 启动服务</code></
   <tr><td>R2 只读</td><td>测试：POST/PUT/DELETE/MKCOL/PROPFIND 等全部 405；代码无写入端点</td></tr>
   <tr><td>R3 渲染</td><td>测试 + 实测：md 渲染出标题/代码高亮，HTML 清洗后渲染，完整模式沙箱生效</td></tr>
   <tr><td>R4 token</td><td>测试：无 token 401、错 token 401、连续失败触发 429；实测手机端输入 token 后可浏览</td></tr>
-  <tr><td>R5 安全不碍事</td><td>测试：响应头（nosniff/CSP）断言；herdr-remote 配置零改动（只新增 ingress 规则）</td></tr>
+  <tr><td>R5 安全不碍事</td><td>测试：响应头（nosniff/CSP）断言；已有隧道配置零改动（只新增 ingress 规则）</td></tr>
 </table>
 
 </main>

@@ -28,7 +28,7 @@
 <ul>
   <li>Python 3.10+（服务端零第三方运行时依赖，只用标准库）</li>
   <li><a href="https://docs.astral.sh/uv/">uv</a>（推荐）：管理项目环境与依赖锁定，<code>uv sync</code> 一键就绪；没有 uv 直接用 <code>python3 -m conv_docs</code> 也可以</li>
-  <li><code>cloudflared</code>（接入你已有的 Cloudflare Tunnel；herdr-remote 在用的那个即可）</li>
+  <li><code>cloudflared</code>（接入你已有的 Cloudflare Tunnel 即可）</li>
   <li>systemd（可选，用于常驻；不用 systemd 也能直接前台运行）</li>
 </ul>
 
@@ -56,10 +56,10 @@ systemctl --user restart conv-docs
 journalctl --user -u conv-docs -f</code></pre>
 
 <h2>三、接入 Cloudflare Tunnel</h2>
-<p>conv-docs 与 herdr-remote 的 relay 共用隧道但互不干扰：只是在 ingress 规则里<strong>新增一条</strong> hostname 映射，relay 的规则与 token 一个字都不用改。</p>
+<p>conv-docs 与已有服务共用隧道但互不干扰：只是在 ingress 规则里<strong>新增一条</strong> hostname 映射，已有规则与 token 一个字都不用改。</p>
 <pre><code># ~/.cloudflared/config.yml（示意，保持你已有的规则）
 ingress:
-  - hostname: relay.你的域名        # 已有的 herdr-remote 规则，原样保留
+  - hostname: relay.你的域名        # 已有的规则，原样保留
     service: http://127.0.0.1:8375
   - hostname: docs.你的域名         # 新增：文档网关
     service: http://127.0.0.1:8380

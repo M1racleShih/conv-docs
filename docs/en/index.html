@@ -22,17 +22,17 @@
 <main>
 
 <h1>Research Report: Workspace Docs on Your Phone</h1>
-<p class="lead">The missing piece of the herdr workflow: read-only Markdown and HTML documents from any workspace, on your phone, without widening the PC's attack surface. This page records the requirements, the survey of existing tools, and the final selection.</p>
+<p class="lead">The missing piece of a document-driven workflow: read-only Markdown and HTML documents from any workspace, on your phone, without widening the PC's attack surface. This page records the requirements, the survey of existing tools, and the final selection.</p>
 <p class="meta">Researched 2026-10-05 · Evidence: GitHub API, Cloudflare docs, OWASP Cheat Sheet (sources listed at the bottom)</p>
 
 <h2>1. Requirements</h2>
 <table>
   <tr><th style="width:120px">ID</th><th>Requirement</th><th>Why</th></tr>
   <tr><td>R1 Explicit grant</td><td>Only explicitly authorised directories are visible on the phone</td><td>The tunnel must never become a backdoor to the whole PC filesystem</td></tr>
-  <tr><td>R2 Read-only</td><td>No editing on the phone</td><td>Document changes continue to go through the agent (herdr); the phone only consumes</td></tr>
+  <tr><td>R2 Read-only</td><td>No editing on the phone</td><td>Document changes continue to go through your editor or coding agent on the PC; the phone only consumes</td></tr>
   <tr><td>R3 Rendering</td><td>Markdown and HTML rendering — HTML at minimum</td><td>Documents must be readable, not downloaded as source</td></tr>
   <tr><td>R4 Token</td><td>Token required; no anonymous access</td><td>A public URL must not mean public content</td></tr>
-  <tr><td>R5 Safety</td><td>As secure as possible without hurting daily use</td><td>The existing herdr-remote control plane (Cloudflare + domain + relay) stays untouched</td></tr>
+  <tr><td>R5 Safety</td><td>As secure as possible without hurting daily use</td><td>Whatever else already runs on the PC and its tunnel (existing services, remote-control channels) stays untouched</td></tr>
 </table>
 <p>Implicit constraints from the usage scenario: open on a phone at any time (no site build step), single user (no account system), and unreliable CDN access from some networks — so static assets must ship with the repo.</p>
 
@@ -46,8 +46,8 @@
 
 <h2>3. Options considered</h2>
 
-<h3>Option A: extend the existing herdr-remote relay</h3>
-<p>Add a read-only <code>/docs</code> endpoint and a phone page to the relay, reusing its tunnel, token and audit log. Cheapest to deploy — but it grows the attack surface of the agent control plane itself: any flaw in document parsing or path handling sits right next to the WebSocket interface that commands the agents. That contradicts R5, so it was rejected.</p>
+<h3>Option A: extend an existing relay service</h3>
+<p>If the tunnel already carries a relay (file sync, remote control, an agent command channel), add a read-only <code>/docs</code> endpoint and a phone page to it, reusing its tunnel, token and audit log. Cheapest to deploy — but it grows the attack surface of that service itself: any flaw in document parsing or path handling sits right next to the interface that service exposes to the outside world. That contradicts R5, so it was rejected.</p>
 
 <h3>Option B: off-the-shelf file servers</h3>
 <table>
@@ -110,7 +110,7 @@
     <td>Code-block syntax highlighting</td>
   </tr>
 </table>
-<p>The server uses only the Python 3 standard library — the target machine (the PC running herdr) already has Python, installation is frictionless, and there is no runtime supply chain to speak of. The phone viewer is dependency-free TypeScript compiled to plain JavaScript.</p>
+<p>The server uses only the Python 3 standard library — the target machine (your PC) already has Python, installation is frictionless, and there is no runtime supply chain to speak of. The phone viewer is dependency-free TypeScript compiled to plain JavaScript.</p>
 
 <div class="callout ok">
 <p><strong>Conclusion:</strong> Option D. The gateway is custom because no existing product combines "multi-root, publish on demand + Bearer token + read-only + rendering" — while the genuinely risky and difficult parts (Markdown parsing, XSS sanitisation, syntax highlighting) are all left to libraries with 17k–37k stars that are actively maintained.</p>

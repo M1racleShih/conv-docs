@@ -28,11 +28,11 @@
 <div class="cards">
   <div class="card">
     <h4>Goals</h4>
-    <p>① Visible only after an explicit publish (R1) ② strictly read-only (R2) ③ Markdown / HTML rendering (R3) ④ token auth (R4) ⑤ fully isolated from the herdr-remote control plane (R5)</p>
+    <p>① Visible only after an explicit publish (R1) ② strictly read-only (R2) ③ Markdown / HTML rendering (R3) ④ token auth (R4) ⑤ fully isolated from anything else running on the machine (R5)</p>
   </div>
   <div class="card">
     <h4>Non-goals</h4>
-    <p>No editing, no multi-user/permission system, no full-text search, no replacement for herdr-remote's agent control, nothing hosted in the cloud</p>
+    <p>No editing, no multi-user/permission system, no full-text search, no remote-control or command channel of any kind, nothing hosted in the cloud</p>
   </div>
 </div>
 
@@ -53,8 +53,8 @@ conv-docs service (127.0.0.1:8380, Python standard library)
    ▼
 published workspace directories (loopback only; exposed solely via the tunnel)
 
-herdr-remote relay :8375 ── control plane, untouched</div>
-<p>Key decision: <strong>the document service is physically isolated from the agent control plane</strong> — different port, different hostname, different token. The document service parses untrusted file content; keeping it in a separate, minimal-privilege process means a parsing bug cannot reach the WebSocket interface that issues commands to agents. That is how "without hurting daily use" is implemented: the existing relay needs zero changes.</p>
+other services on the machine (e.g. your own relay) ── untouched</div>
+<p>Key decision: <strong>the document service is physically isolated from everything else on the machine</strong> — different port, different hostname, different token. The document service parses untrusted file content; keeping it in a separate, minimal-privilege process means a parsing bug cannot reach any other service you run. That is how "without hurting daily use" is implemented: existing services need zero changes.</p>
 
 <h2>3. Core concepts</h2>
 <table>
@@ -107,7 +107,7 @@ $ uv run conv-docs serve --host 127.0.0.1 --port 8380    # start the service</co
   <tr><td>Token leaking into logs/URLs</td><td>The token travels only in the Authorization header; tickets are short-lived, single-use and file-bound; the audit log records events and paths, never credentials</td></tr>
   <tr><td>Repudiation / after-the-fact review</td><td>JSONL audit log: failed auth, ticket rejections, file access (time, source IP, root, path)</td></tr>
   <tr><td>Resource exhaustion (huge files)</td><td>Render size cap (default 2 MB, with an explicit "render anyway" option); per-connection timeouts; oversized URLs and request bodies refused</td></tr>
-  <tr><td>Bleeding into the agent control plane (R5)</td><td>Separate process, port, hostname and token; loopback binding, exposed only through the tunnel; herdr-remote relay untouched</td></tr>
+  <tr><td>Bleeding into other services on the machine (R5)</td><td>Separate process, port, hostname and token; loopback binding, exposed only through the tunnel; everything else on the machine untouched</td></tr>
 </table>
 
 <div class="callout warn">
@@ -121,7 +121,7 @@ $ uv run conv-docs serve --host 127.0.0.1 --port 8380    # start the service</co
   <tr><td>R2 Read-only</td><td>Tests: POST/PUT/DELETE/MKCOL/PROPFIND … all 405; no write endpoint exists</td></tr>
   <tr><td>R3 Rendering</td><td>Tests + real-browser checks: md renders with highlighted code, HTML sanitises correctly, full-mode sandbox verified</td></tr>
   <tr><td>R4 Token</td><td>Tests: no token 401, wrong token 401, repeated failures 429; real phone login verified</td></tr>
-  <tr><td>R5 Safe and unobtrusive</td><td>Tests assert response headers (nosniff/CSP); herdr-remote config unchanged (one ingress rule added)</td></tr>
+  <tr><td>R5 Safe and unobtrusive</td><td>Tests assert response headers (nosniff/CSP); existing tunnel config unchanged (one ingress rule added)</td></tr>
 </table>
 
 </main>
