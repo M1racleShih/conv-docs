@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import re
 import threading
 import time
 
@@ -31,8 +32,10 @@ IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "avif", "ico", "svg"}
 MARKDOWN_EXTS = {"md", "markdown", "mdown", "mkd"}
 HTML_EXTS = {"html", "htm"}
 PDF_EXTS = {"pdf"}
-TEXT_EXTS = {
-    "txt", "rst", "adoc", "org", "text", "log", "csv", "tsv",
+# 纯文本文档与数据表：默认可见
+TEXT_EXTS = {"txt", "text", "log", "rst", "adoc", "org", "csv", "tsv"}
+# 源代码与结构化数据/配置：默认被代码过滤挡住（--allow-code 放行）
+CODE_EXTS = {
     "json", "yaml", "yml", "toml", "ini", "cfg", "conf", "properties", "env.example",
     "py", "pyi", "js", "mjs", "cjs", "ts", "tsx", "jsx", "css", "scss", "less",
     "java", "kt", "kts", "go", "rs", "rb", "php", "swift", "m", "mm", "cs", "fs",
@@ -40,18 +43,26 @@ TEXT_EXTS = {
     "sql", "xml", "svgz", "vue", "svelte", "lua", "pl", "r", "dart", "gradle",
     "cmake", "mk", "make", "nix", "zig", "proto", "graphql", "gql", "ipynb",
 }
-SPECIAL_TEXT_NAMES = {
-    "makefile", "dockerfile", "jenkinsfile", "license", "copying", "notice",
-    "procfile", "gemfile", "rakefile", "cmakelists.txt", "readme", "changelog",
-    "codeowners", "vagrantfile",
+# 无扩展名的特殊文件名：文档类（text）
+SPECIAL_DOC_NAMES = {"license", "copying", "notice", "readme", "changelog"}
+# 无扩展名的特殊文件名：构建/代码类（code）
+SPECIAL_CODE_NAMES = {
+    "makefile", "dockerfile", "jenkinsfile", "procfile", "gemfile",
+    "rakefile", "cmakelists.txt", "codeowners", "vagrantfile",
 }
 
 
 def classify(name: str) -> str | None:
-    """返回文件渲染类别：markdown / html / text / image / pdf；不支持则 None。"""
+    """返回文件渲染类别：markdown / html / text / code / image / pdf；不支持则 None。
+
+    code = 源代码与结构化数据/配置，受代码过滤管控（默认不可见）。
+    """
     base = os.path.basename(name)
-    if base.lower() in SPECIAL_TEXT_NAMES:
+    lowered = base.lower()
+    if lowered in SPECIAL_DOC_NAMES:
         return "text"
+    if lowered in SPECIAL_CODE_NAMES:
+        return "code"
     ext = base.rsplit(".", 1)[-1].lower() if "." in base else ""
     if not ext:
         return None
@@ -65,6 +76,8 @@ def classify(name: str) -> str | None:
         return "pdf"
     if ext in TEXT_EXTS:
         return "text"
+    if ext in CODE_EXTS:
+        return "code"
     return None
 
 
@@ -120,6 +133,75 @@ def resolve_within(root: str, rel: str, *, skip_hidden: bool = True) -> str:
 
 def safe_rel(full: str, root: str) -> str:
     return os.path.relpath(full, os.path.realpath(root)).replace(os.sep, "/")
+
+
+# ---------- exclude 规则（发布/预览时显式排除敏感路径） ----------
+
+
+def _glob_seg(seg: str) -> str:
+    """单个路径段转 regex：** → .*，* → [^/]*，? → [^/]，其余转义。"""
+    out: list[str] = []
+    i = 0
+    while i < len(seg):
+        ch = seg[i]
+        if ch == "*":
+            if i + 1 < len(seg) and seg[i + 1] == "*":
+                out.append(".*")
+                i += 2
+            else:
+                out.append("[^/]*")
+                i += 1
+            continue
+        if ch == "?":
+            out.append("[^/]")
+            i += 1
+            continue
+        out.append(re.escape(ch))
+        i += 1
+    return "".join(out)
+
+
+def compile_excludes(patterns: list[str]) -> list[tuple[re.Pattern, bool, str]]:
+    """把 exclude 模式编译为 (regex, 含路径分隔符, 规范化模式)。
+
+    语义（类 .gitignore 简化版）：
+    - 模式不含 "/"：匹配任意层级的文件名（如 ``*.env`` 挡住所有层级的 .env）；
+    - 模式含 "/"：相对发布根的整体路径匹配（如 ``secrets/**``、``build/*``）。
+    """
+    compiled: list[tuple[re.Pattern, bool, str]] = []
+    for pattern in patterns or []:
+        pat = (pattern or "").strip().replace("\\", "/").strip("/")
+        if not pat or pat == ".":
+            continue
+        has_sep = "/" in pat
+        regex = "/".join(_glob_seg(seg) for seg in pat.split("/"))
+        compiled.append((re.compile("^(?:" + regex + ")$"), has_sep, pat))
+    return compiled
+
+
+def excluded(rel: str, compiled: list[tuple[re.Pattern, bool, str]], *, is_dir: bool = False) -> bool:
+    """判断相对路径 rel 是否被 exclude 规则命中。
+
+    - 含分隔符模式：整体路径匹配（``secrets/**``、``build/*``）；
+    - 不含分隔符模式：匹配任意一段（``data`` 命中 data、data/x、a/data/y
+      ——同名目录整棵子树被剪；``*.env`` 命中任意层 .env 文件）；
+    - ``secrets/**`` 额外剪掉 secrets 目录本身；``build/*`` 只过滤一级条目，
+      不剪 build 目录（二级内容仍可见）。
+    """
+    rel = (rel or "").replace("\\", "/").strip("/")
+    if not rel or not compiled:
+        return False
+    segments = rel.split("/")
+    for regex, has_sep, pat in compiled:
+        if regex.match(rel):
+            return True
+        if not has_sep and any(regex.match(seg) for seg in segments):
+            return True
+    if is_dir:
+        for _regex, _has_sep, pat in compiled:
+            if pat.endswith("/**") and rel == pat[: -len("/**")].rstrip("/"):
+                return True
+    return False
 
 
 # ---------- 认证失败限速 ----------

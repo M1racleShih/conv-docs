@@ -1,6 +1,9 @@
 """conv-docs 命令行入口。
 
-    python3 -m conv_docs publish <dir> [--as NAME] [--docs-only]
+    python3 -m conv_docs publish <dir> [--as NAME] [--docs-only] [--project P]
+                                       [--exclude GLOB ...] [--allow-code]
+    python3 -m conv_docs preview <file|dir> [--as NAME] [--ttl 2h] [--once]
+                                    [--exclude GLOB ...] [--allow-code] [--docs-only] [--project P]
     python3 -m conv_docs unpublish <name>
     python3 -m conv_docs list
     python3 -m conv_docs token rotate
@@ -15,18 +18,58 @@ import secrets
 import sys
 
 from . import __version__
-from .store import ConfigStore, StoreError, default_config_path
+from .store import DEFAULT_PREVIEW_TTL, ConfigStore, StoreError, default_config_path, parse_ttl
+
+
+def _fmt_remaining(seconds: int) -> str:
+    if seconds >= 3600:
+        return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}m"
+    if seconds >= 60:
+        return f"{seconds // 60}m{seconds % 60:02d}s"
+    return f"{seconds}s"
 
 
 def cmd_publish(args, store: ConfigStore) -> int:
     try:
-        pub = store.publish(args.path, name=args.as_name, docs_only=args.docs_only)
+        pub = store.publish(args.path, name=args.as_name, docs_only=args.docs_only,
+                            project=args.project, excludes=args.exclude,
+                            allow_code=args.allow_code)
     except StoreError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"published {pub.name} → {pub.path}")
     if pub.docs_only:
         print("(docs-only: documents and images only)")
+    if pub.allow_code:
+        print("(allow-code: source code and data files are visible)")
+    if pub.excludes:
+        print(f"(excludes: {' '.join(pub.excludes)})")
+    if pub.project:
+        print(f"(project: {pub.project})")
+    return 0
+
+
+def cmd_preview(args, store: ConfigStore) -> int:
+    try:
+        ttl = parse_ttl(args.ttl)
+        pub = store.preview(args.path, name=args.as_name, ttl=ttl, once=args.once,
+                            docs_only=args.docs_only, project=args.project,
+                            excludes=args.exclude, allow_code=args.allow_code)
+    except StoreError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    from .security import classify
+    if os.path.isfile(pub.path) and not (pub.allow_code or pub.docs_only) \
+            and classify(pub.path) == "code" and store.filter_code:
+        print("note: this file is code-filtered by default; viewers cannot see it without --allow-code",
+              file=sys.stderr)
+    suffix = " · single view" if pub.once else ""
+    print(f"preview {pub.name} → {pub.path}  (expires in {_fmt_remaining(ttl)}{suffix})")
+    if pub.excludes:
+        print(f"(excludes: {' '.join(pub.excludes)})")
+    if pub.project:
+        print(f"(project: {pub.project})")
+    print("temporary preview: it disappears automatically when expired")
     return 0
 
 
@@ -39,12 +82,28 @@ def cmd_unpublish(args, store: ConfigStore) -> int:
 
 
 def cmd_list(args, store: ConfigStore) -> int:
+    store.purge_expired()
     pubs = store.publishes()
     if not pubs:
         print("no published directories (nothing is exposed by default)")
         return 0
     for pub in pubs:
-        suffix = "  [docs-only]" if pub.docs_only else ""
+        tags = []
+        if pub.is_preview:
+            remaining = store.preview_remaining(pub)
+            if pub.once:
+                tags.append("preview · single view" + (f" · burning ({_fmt_remaining(remaining)})" if pub.burned_at else ""))
+            else:
+                tags.append(f"preview · {_fmt_remaining(remaining) if remaining is not None else '—'} left")
+        if pub.docs_only:
+            tags.append("docs-only")
+        if pub.allow_code:
+            tags.append("allow-code")
+        if pub.project:
+            tags.append(f"project:{pub.project}")
+        if pub.excludes:
+            tags.append(f"excludes:{len(pub.excludes)}")
+        suffix = f"  [{' | '.join(tags)}]" if tags else ""
         print(f"{pub.name:24s} → {pub.path}{suffix}  (published at {pub.published_at})")
     return 0
 
@@ -96,7 +155,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("path", help="directory to publish (absolute or relative)")
     p.add_argument("--as", dest="as_name", default=None, help="publish name (defaults to the directory name)")
     p.add_argument("--docs-only", action="store_true", help="allow documents and images only")
+    p.add_argument("--project", default=None, metavar="NAME",
+                   help="group this publish under a project (implicit, groups the web UI)")
+    p.add_argument("--exclude", action="append", default=[], metavar="GLOB",
+                   help="exclude pattern, repeatable (e.g. --exclude '*.env' --exclude 'secrets/**')")
+    p.add_argument("--allow-code", action="store_true",
+                   help="show source code and data/config files (hidden by default)")
     p.set_defaults(func=cmd_publish)
+
+    p = sub.add_parser("preview", help="temporary preview that expires (file or directory)")
+    p.add_argument("path", help="file or directory to preview (absolute or relative)")
+    p.add_argument("--as", dest="as_name", default=None, help="preview name (defaults to the file/directory name)")
+    p.add_argument("--ttl", default=str(DEFAULT_PREVIEW_TTL), metavar="DUR",
+                   help="lifetime, e.g. 30m / 2h / 7d or plain seconds (default 24h; max 30d)")
+    p.add_argument("--once", action="store_true",
+                   help="burn after first view: expires 10 minutes after the first content access")
+    p.add_argument("--docs-only", action="store_true", help="allow documents and images only")
+    p.add_argument("--project", default=None, metavar="NAME", help="group this preview under a project")
+    p.add_argument("--exclude", action="append", default=[], metavar="GLOB", help="exclude pattern, repeatable")
+    p.add_argument("--allow-code", action="store_true", help="show source code and data/config files")
+    p.set_defaults(func=cmd_preview)
 
     p = sub.add_parser("unpublish", help="revoke a publish")
     p.add_argument("name")

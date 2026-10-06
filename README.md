@@ -26,10 +26,15 @@ conv-docs serves **explicitly published** workspace directories from your PC, th
 ## Features
 
 - **Explicit grants** — nothing is exposed by default; `publish` / `unpublish` per directory, effective immediately
+- **Temporary previews** — `preview` a file or directory with a TTL (default 24h) or `--once` burn-after-reading; same path re-previews replace and reset
+- **Code filtering** — source code and structured data/config files (`.py`, `.json`, `.yaml`, …) are hidden by default; opt in per publish with `--allow-code`
+- **Exclude patterns** — `--exclude '*.env' --exclude 'secrets/**'`: server-enforced at every layer (listings and direct access both 404)
+- **Projects** — `--project NAME` groups entries in the web UI; single-token model unchanged
 - **Strictly read-only** — GET/HEAD only; WebDAV-style write verbs return 405
 - **Token auth** — Bearer token, server stores a SHA-256 hash only (config 0600), one-command rotation, per-source failure rate limiting
 - **Markdown & HTML rendering** — marked + DOMPurify + highlight.js (vendored), plus a script-sandboxed "full mode" for interactive HTML
 - **Path sandbox** — realpath containment, symlink-escape refusal, hidden files skipped, extension allowlist
+- **Agent skill** — `skills/conv-docs/SKILL.md` lets coding agents hand reports to your phone safely (preview-first, excludes, token discipline)
 - **Zero third-party runtime dependencies** — Python 3.10+ standard library; the viewer is dependency-free TypeScript
 - **Bilingual UI** — English by default, one tap to switch to Chinese
 
@@ -50,17 +55,24 @@ Run as a service: `bash scripts/install-service.sh` (systemd user unit + a cloud
 
 | Command | Purpose |
 |---------|---------|
-| `publish <dir> [--as NAME] [--docs-only]` | Publish a directory explicitly (`--docs-only` = documents and images only) |
-| `unpublish <name>` | Revoke a publish |
-| `list` | Show the publish list |
+| `publish <dir> [--as NAME] [--docs-only] [--project P] [--exclude GLOB…] [--allow-code]` | Publish a directory explicitly (`--docs-only` = documents and images only) |
+| `preview <file\|dir> [--as NAME] [--ttl 2h] [--once] [same flags as publish]` | Temporary preview that expires (default 24h; `--once` burns 10 min after first view) |
+| `unpublish <name>` | Revoke a publish or preview |
+| `list` | Show publishes and previews (remaining time, project, excludes) |
 | `token rotate` | Generate a new token and invalidate the old one |
 | `serve [--host H] [--port P]` | Start the read-only service (default 127.0.0.1:8380) |
+
+Notes:
+
+- **Code filtering**: code and data/config files are hidden by default (global `settings.filter_code`, per-entry `--allow-code` override). Plain-text documents and data tables (`txt/log/rst/csv/tsv…`) stay visible. HTML files that load companion `.css` need `--allow-code` for their styles.
+- **Exclude semantics** (simplified .gitignore): a pattern without `/` matches that file name at any depth (`*.env`); with `/` it is relative to the root (`secrets/**`, `build/*`). Excluded paths are enforced server-side — hidden from listings and 404 on direct access.
+- **Previews**: re-previewing the same path replaces the old entry and resets the clock; expired/burned entries disappear automatically.
 
 ## Development & verification
 
 ```bash
-uv run pytest                               # 49 unit tests: auth, read-only, path sandbox, tickets, headers
-TOKEN=<token> node scripts/browser-smoke.mjs # headless-Chrome end-to-end: login → browse → render → sandbox (17 checks)
+uv run pytest                               # 77 unit tests: auth, read-only, path sandbox, tickets, headers, code filter, excludes, previews
+TOKEN=<token> node scripts/browser-smoke.mjs # headless-Chrome end-to-end: login → browse → render → sandbox (18 checks; fixture root needs --allow-code)
 npm install && npm run build                # rebuild the TypeScript viewer (web-src/app.ts → src/conv_docs/web/app.js)
 ```
 
@@ -70,6 +82,7 @@ Project layout:
 src/conv_docs/          Python package: server (store / security / http) + compiled web viewer
 src/conv_docs/web/      viewer bundle (compiled app.js is committed; vendored libs incl. licenses)
 web-src/app.ts          viewer source (TypeScript, strict)
+skills/conv-docs/       agent skill source (import into a skill pool with `dskills install skills/conv-docs`)
 tests/                  test suite (unittest-style; runs under pytest or unittest)
 scripts/                install-service.sh · fetch-vendor.sh · browser-smoke.mjs
 docs/en/, docs/zh/      HTML documentation (bilingual)
