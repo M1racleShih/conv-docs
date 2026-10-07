@@ -21,6 +21,7 @@ conv-docs serves **explicitly published** workspace directories from your PC, th
 | Research report (why these wheels) | [docs/en/index.html](docs/en/index.html) | [docs/zh/index.html](docs/zh/index.html) |
 | Design & threat model | [docs/en/design.html](docs/en/design.html) | [docs/zh/design.html](docs/zh/design.html) |
 | Deployment & usage | [docs/en/deploy.html](docs/en/deploy.html) | [docs/zh/deploy.html](docs/zh/deploy.html) |
+| Deployment runbook (0→1: build → tunnel → acceptance) | [docs/deploy-runbook.en.md](docs/deploy-runbook.en.md) | [docs/deploy-runbook.zh.md](docs/deploy-runbook.zh.md) |
 | Security review (STRIDE) | [docs/en/security-review.html](docs/en/security-review.html) | [docs/zh/security-review.html](docs/zh/security-review.html) |
 
 ## Features
@@ -34,7 +35,7 @@ conv-docs serves **explicitly published** workspace directories from your PC, th
 - **Token auth** — Bearer token, server stores a SHA-256 hash only (config 0600), one-command rotation, per-source failure rate limiting
 - **Markdown & HTML rendering** — marked + DOMPurify + highlight.js (vendored), plus a script-sandboxed "full mode" for interactive HTML
 - **Path sandbox** — realpath containment, symlink-escape refusal, hidden files skipped, extension allowlist
-- **Agent skill** — `skills/conv-docs/SKILL.md` lets coding agents hand reports to your phone safely (preview-first, excludes, token discipline)
+- **Agent skills** — `skills/conv-docs/SKILL.md` lets coding agents hand reports to your phone safely (preview-first, excludes, token discipline); `skills/conv-docs-deploy/SKILL.md` executes the 0→1 deployment runbook under strict stop conditions
 - **Zero third-party runtime dependencies** — Python 3.10+ standard library; the viewer is dependency-free TypeScript
 - **Bilingual UI** — English by default, one tap to switch to Chinese
 
@@ -50,6 +51,8 @@ uv run conv-docs serve                 # 127.0.0.1:8380
 > `uv run conv-docs` is equivalent to `python3 -m conv_docs`. The server has zero third-party runtime dependencies.
 
 Run as a service: `bash scripts/install-service.sh` (systemd user unit + a cloudflared ingress snippet).
+
+Full 0→1 deployment (build → local service → Cloudflare Tunnel → phone acceptance): [docs/deploy-runbook.en.md](docs/deploy-runbook.en.md), with acceptance gates in [docs/deploy-gates.md](docs/deploy-gates.md).
 
 ## Commands
 
@@ -83,9 +86,11 @@ src/conv_docs/          Python package: server (store / security / http) + compi
 src/conv_docs/web/      viewer bundle (compiled app.js is committed; vendored libs incl. licenses)
 web-src/app.ts          viewer source (TypeScript, strict)
 skills/conv-docs/       agent skill source (import into a skill pool with `dskills install skills/conv-docs`)
+skills/conv-docs-deploy/ deployment skill: runs the 0→1 runbook with stop conditions & secret discipline
 tests/                  test suite (unittest-style; runs under pytest or unittest)
 scripts/                install-service.sh · fetch-vendor.sh · browser-smoke.mjs
 docs/en/, docs/zh/      HTML documentation (bilingual)
+docs/deploy-runbook.*   0→1 deployment runbook (zh/en) · deploy-gates.md acceptance gates G0–G5
 assets/                 logo (original artwork, MIT)
 pyproject.toml          uv project (zero runtime deps; dev group has pytest) · uv.lock committed
 ```
