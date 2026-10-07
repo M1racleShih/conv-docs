@@ -21,6 +21,7 @@ conv-docs 把 PC 上**显式发布**的 workspace 目录，通过 [Cloudflare Tu
 | 调研报告（选型依据） | [docs/en/index.html](docs/en/index.html) | [docs/zh/index.html](docs/zh/index.html) |
 | 方案设计与威胁模型 | [docs/en/design.html](docs/en/design.html) | [docs/zh/design.html](docs/zh/design.html) |
 | 部署与使用手册 | [docs/en/deploy.html](docs/en/deploy.html) | [docs/zh/deploy.html](docs/zh/deploy.html) |
+| 部署施工图（0→1：build → 打通 → 验收） | [docs/deploy-runbook.en.md](docs/deploy-runbook.en.md) | [docs/deploy-runbook.zh.md](docs/deploy-runbook.zh.md) |
 | 安全评审（STRIDE） | [docs/en/security-review.html](docs/en/security-review.html) | [docs/zh/security-review.html](docs/zh/security-review.html) |
 
 ## 特性
@@ -34,7 +35,7 @@ conv-docs 把 PC 上**显式发布**的 workspace 目录，通过 [Cloudflare Tu
 - **token 认证** —— Bearer token，服务端只存 SHA-256 哈希（配置 0600），一键轮换，按来源的失败限速
 - **Markdown / HTML 渲染** —— marked + DOMPurify + highlight.js（内置），交互式 HTML 另有脚本沙箱「完整模式」
 - **路径沙箱** —— realpath 包含性检查、符号链接逃逸拒绝、隐藏文件跳过、扩展名白名单
-- **Agent skill** —— `skills/conv-docs/SKILL.md` 让编码 agent 安全地把报告送到手机（preview 优先、敏感排除、token 纪律）
+- **Agent skills** —— `skills/conv-docs/SKILL.md` 让编码 agent 安全地把报告送到手机（preview 优先、敏感排除、token 纪律）；`skills/conv-docs-deploy/SKILL.md` 在严格停止条件下执行 0→1 部署施工图
 - **零第三方运行时依赖** —— Python 3.10+ 标准库；查看器为无依赖 TypeScript
 - **双语界面** —— 默认英文，一键切换中文
 
@@ -50,6 +51,8 @@ uv run conv-docs serve                 # 127.0.0.1:8380
 > `uv run conv-docs` 与 `python3 -m conv_docs` 等价；服务端零第三方运行时依赖。
 
 常驻运行：`bash scripts/install-service.sh`（systemd 用户服务 + cloudflared ingress 配置片段）。
+
+从 0 到 1 完整部署（build → 本机服务 → Cloudflare 打通 → 手机验收）见 [docs/deploy-runbook.zh.md](docs/deploy-runbook.zh.md)，验收 gate 在 [docs/deploy-gates.md](docs/deploy-gates.md)。
 
 ## 命令
 
@@ -83,9 +86,11 @@ src/conv_docs/          Python 包：服务端（store / security / http）+ 编
 src/conv_docs/web/      查看器产物（app.js 已提交；vendor 库含各自许可证）
 web-src/app.ts          查看器源码（strict TypeScript）
 skills/conv-docs/       agent skill 源文件（`dskills install skills/conv-docs` 导入技能池）
+skills/conv-docs-deploy/ 部署 skill：带停止条件与 secrets 纪律执行 0→1 施工图
 tests/                  测试（unittest 风格，pytest / unittest 均可跑）
 scripts/                install-service.sh · fetch-vendor.sh · browser-smoke.mjs
 docs/en/, docs/zh/      HTML 文档（双语）
+docs/deploy-runbook.*   0→1 部署施工图（中英）· deploy-gates.md 验收 gate G0–G5
 assets/                 logo（原创美术作品，MIT）
 pyproject.toml          uv 项目（运行时零依赖，dev 组含 pytest）· uv.lock 已提交
 ```
